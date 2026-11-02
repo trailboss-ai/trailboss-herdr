@@ -11,10 +11,10 @@ python3 integrations/herdr/install.py     # --dry-run first to see what it chang
 
 The installer:
 - runs `herdr-app check` and copies `mods/trailboss/` to `~/.config/herdr-app/mods/`;
-- binds **Alt+Shift+T** to the dashboard, unless that key is already taken (then it tells you);
+- binds **Alt+Shift+T** to the dashboard and **Alt+Shift+I** to the Insights window, unless a key is already taken (then it tells you);
 - adds a 320px block at the right of the current layout's status bar. If that layout is one of Herdr's own (`main`, …), which Herdr replaces on every start, it's cloned first as `<name>-trailboss` and switched to. A layout of your own is edited in place, after a backup in `~/.config/herdr-app/data/trailboss/backups/`.
 
-`--update` copies a newer mod over an install; `--uninstall` takes the block and the key out and removes the mod.
+`--update` copies a newer mod over an install; `--uninstall` takes the block and the keys out and removes the mod.
 
 **Replacing agent-resume-plus:** the installer refuses while it's installed, because both would resume the same terminals after a reboot. Uninstall it first (`python3 <herdr-agent-resume-plus>/scripts/install.py --uninstall`). Trailboss starts tracking from scratch; agent-resume-plus's tracked sessions aren't carried over.
 
@@ -28,7 +28,7 @@ python3 integrations/herdr/install.py --take-over --dry-run   # see what changes
 python3 integrations/herdr/install.py --take-over
 ```
 
-Their blocks in your layouts become Trailboss views, with the same ids and sizes, so panel buttons keep working: Sessions and Stats in the side panel, quotas in the status bar. Icons other mods borrowed from them (tabs-plus) now point at Trailboss's. The four mods are removed through Herdr's package manager, which keeps them in `data/pkg/removed/`. The layouts and edited mods are backed up in `data/trailboss/backups/`. Insights opens from the dashboard's **Insights ↗** button.
+Their blocks in your layouts become Trailboss views, with the same ids and sizes, so panel buttons keep working: Sessions and Stats in the side panel, quotas in the status bar. Icons other mods borrowed from them (tabs-plus) now point at Trailboss's. The four mods are removed through Herdr's package manager, which keeps them in `data/pkg/removed/`. The layouts and edited mods are backed up in `data/trailboss/backups/`. Insights opens from the dashboard's **Insights ↗** button or **Alt+Shift+I** (which needs the status-bar block in the layout).
 
 ## Files and editor, agent-aware (opt-in)
 

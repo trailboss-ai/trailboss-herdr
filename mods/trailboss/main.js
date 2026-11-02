@@ -1,11 +1,11 @@
 import { View } from "gpui-kit";
-import { props } from "herdr";
+import { props, nextCommand } from "herdr";
 import { Block } from "./fleet/block.js";
 import { Dashboard } from "./fleet/dashboard.js";
 import { QuotaStrip, QuotaDetail, QuotaPicker } from "./usage/quota.js";
 import { Sessions, SessionAgents } from "./fleet/sessions.js";
 import { Stats } from "./usage/stats.js";
-import { Insights } from "./usage/insights.js";
+import { Insights, openInsights } from "./usage/insights.js";
 import { Files, FilesMenu } from "./files/files.js";
 import { EditorView } from "./files/editor.js";
 import { Changes } from "./files/changes.js";
@@ -20,7 +20,7 @@ import { Review } from "./files/review.js";
 //   quota           the plan-quota strip for the status bar (replaces usage-bar)
 //   sessions        the session list for the side panel (replaces session-history)
 //   stats           delivery stats for the side panel (replaces stats)
-//   insights        usage insights, as a window (replaces insights)
+//   insights        usage insights, as a window (replaces insights; Alt+Shift+I opens it)
 //   files           agent-aware files for the side panel (replaces Files)
 //   editor          the multi-tab editor pane files open in
 //   changes         agent-aware git changes for the side panel (replaces Changes)
@@ -48,6 +48,14 @@ export default class Trailboss extends View {
     const Kind = VIEWS[p.view] ?? (p.overlay ? Dashboard : Block);
     this.view = new Kind();
     this.view.init(p, cx);
+    // mod.open can't pass props, so Alt+Shift+I sends "trailboss.insights" instead. Every shown
+    // copy gets it; only the status-bar block (always shown) acts, so it opens once.
+    // ponytail: no block in the layout means no key; the dashboard button still works.
+    if (Kind === Block) {
+      cx.spawn(async () => {
+        for (;;) if ((await nextCommand()) === "insights") openInsights();
+      });
+    }
   }
 
   render(cx) {

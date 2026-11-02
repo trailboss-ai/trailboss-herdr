@@ -15,7 +15,7 @@
   add --dry-run to any of them to see what would change
 
 It needs the Trailboss CLI installed: --get-cli, a release archive, or cargo install --path . It copies mods/trailboss,
-binds alt-shift-t to the dashboard (refusing a key already in use), and adds the mod's
+binds alt-shift-t to the dashboard and alt-shift-i to Insights (refusing a key already in use), and adds the mod's
 320px block at the right of the current layout's status bar: it has to be in the layout
 to keep tracking sessions and to resume them after a reboot. Herdr's own layouts (main,
 ...) are replaced on every start, so one of those is cloned first as <name>-trailboss (and

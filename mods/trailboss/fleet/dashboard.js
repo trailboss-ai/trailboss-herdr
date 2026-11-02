@@ -1,8 +1,9 @@
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { theme, props, openOverlay, closeOverlay, notify, run } from "herdr";
+import { theme, props, closeOverlay, notify, run } from "herdr";
 import { liveTree } from "./tree.js";
-import { MOD, ICON, findBin, tb, plural, money, daysAgo, short, statusColor, MISSING } from "../lib.js";
+import { openInsights } from "../usage/insights.js";
+import { ICON, findBin, tb, plural, money, daysAgo, short, statusColor, MISSING } from "../lib.js";
 
 // The dashboard (Alt+Shift+T, or click the status block): Live, Sessions, Usage, Quota and
 // Stats, each one Trailboss command, plus a button for the Insights window.
@@ -452,7 +453,7 @@ export class Dashboard {
               .text_color(t.muted)
               .hover((s) => s.bg(t.hover).text_color(t.foreground))
               .on_click(() => {
-                openOverlay({ mod: MOD, props: { view: "insights" }, kind: "window", key: "trailboss-insights", width: 1100, height: 820 });
+                openInsights();
                 closeOverlay(this.overlay);
               })
               .child("Insights ↗"),

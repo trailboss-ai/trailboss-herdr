@@ -1,13 +1,17 @@
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Editor, EditorState } from "gpui-base";
-import { exec, theme, settings, home, readTextFile, shared, setShared, closeOverlay } from "herdr";
-import { tb, err, findBin, compact, duration, longDate, monthDay, money, plural, short } from "../lib.js";
+import { exec, theme, settings, home, readTextFile, shared, setShared, openOverlay, closeOverlay } from "herdr";
+import { MOD, tb, err, findBin, compact, duration, longDate, monthDay, money, plural, short } from "../lib.js";
 
 // Usage insights, as a window (what the insights mod did): lifetime numbers and streaks, a
 // year heatmap, a token breakdown for any day, weekly top models and a model leaderboard
 // against the previous period, with periods and filters; and settings for the view, the
 // sources Trailboss reads, and the config itself. Ported in shape from the insights mod
 // (MIT, Gagan Devagiri; see THIRD_PARTY_NOTICES.md), which also made the logos.
+
+// The same `key` replaces an open Insights window in place, so pressing it twice is harmless.
+export const openInsights = () =>
+  openOverlay({ mod: MOD, props: { view: "insights" }, kind: "window", key: "trailboss-insights", width: 1100, height: 820 });
 
 const PREFS = "trailboss.insights.prefs";
 const DEFAULTS = { palette: "blue", weekStart: 0, includeCache: true, refreshSeconds: 60, mode: "daily" };
