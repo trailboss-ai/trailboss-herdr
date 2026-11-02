@@ -3,10 +3,10 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme, props, openOverlay, closeOverlay, notify, run } from "herdr";
 import { MOD, ICON, findBin, tb, plural, money, daysAgo, short, statusColor, MISSING } from "../lib.js";
 
-// The dashboard (Alt+Shift+T, or click the status block): Live, Search, Usage, Quota and
+// The dashboard (Alt+Shift+T, or click the status block): Live, Sessions, Usage, Quota and
 // Stats, each one Trailboss command, plus a button for the Insights window.
 
-const TABS = ["Live", "Search", "Usage", "Quota", "Stats"];
+const TABS = ["Live", "Sessions", "Usage", "Quota", "Stats"];
 
 export class Dashboard {
   init(p, cx) {
@@ -20,7 +20,16 @@ export class Dashboard {
     this.loading = {};
     this.errors = {};
     this.input = InputState.new({ placeholder: "Search every agent's sessions…" });
-    this.input.on("submit", (_e, cx) => this.load(cx, "Search"));
+    this.typed = 0;
+    this.input.on("submit", (_e, cx) => this.load(cx, "Sessions"));
+    // Search as you type, once typing pauses.
+    this.input.on("change", (_e, cx) => {
+      const n = ++this.typed;
+      cx.spawn(async (cx) => {
+        await new Promise((r) => cx.timer.after(300, () => r()));
+        if (n === this.typed) await this.load(cx, "Sessions");
+      });
+    });
     cx.spawn(async (cx) => {
       this.bin = await findBin();
       if (!this.bin) this.error = MISSING;
@@ -40,9 +49,19 @@ export class Dashboard {
       if (tab === "Live") {
         this.rows.Live = await tb(["live"]);
         this.rows.Lost = await tb(["resume", "--dry-run"]);
-      } else if (tab === "Search") {
-        const words = this.input.value().trim().split(/\s+/).filter(Boolean);
-        this.rows.Search = words.length ? await tb(["search", "-n", "40", ...words]) : [];
+      } else if (tab === "Sessions") {
+        // An empty box lists recent sessions; words search them, best hit per session.
+        const q = this.input.value().trim();
+        const words = q.split(/\s+/).filter(Boolean);
+        this.query = q;
+        if (!words.length) {
+          this.rows.Sessions = await tb(["sessions", "-n", "40"]);
+        } else {
+          const seen = new Set();
+          this.rows.Sessions = (await tb(["search", "-n", "200", ...words]))
+            .filter((h) => !seen.has(`${h.agent}/${h.session_id}`) && seen.add(`${h.agent}/${h.session_id}`))
+            .slice(0, 40);
+        }
       } else if (tab === "Usage") {
         this.rows.Usage = await tb(["usage", "--by", "day", "--since", daysAgo(13)]);
         this.rows.Models = await tb(["usage", "--by", "model", "--since", daysAgo(29)]);
@@ -61,11 +80,14 @@ export class Dashboard {
       this.loading[tab] = false;
     }
     cx.notify();
+    // Typing during a search is dropped by the loading guard above; catch up now.
+    if (tab === "Sessions" && !this.errors.Sessions && this.input.value().trim() !== this.query)
+      cx.spawn((cx) => this.load(cx, "Sessions"));
   }
 
   show(tab, cx) {
     this.tab = tab;
-    if (tab === "Search") this.input.focus();
+    if (tab === "Sessions") this.input.focus();
     if (!this.rows[tab]) cx.spawn((cx) => this.load(cx, tab));
     cx.notify();
   }
@@ -189,7 +211,7 @@ export class Dashboard {
       }
     }
 
-    if (tab === "Search") {
+    if (tab === "Sessions") {
       out.push(
         div()
           .px(10)
@@ -206,19 +228,21 @@ export class Dashboard {
               .text_color(t.foreground),
           ),
       );
-      const rows = this.rows.Search;
-      if (rows && !rows.length) out.push(this.note(t, "No matches."));
-      if (!rows) out.push(this.note(t, "Words in any order; press Enter. Click a result to reopen that session in a new tab."));
+      // Rows are search hits when there's a query, else recent sessions from `trailboss sessions`.
+      const rows = this.rows.Sessions;
+      if (rows && !rows.length) out.push(this.note(t, this.query ? "No matches." : "No sessions indexed yet."));
+      if (rows?.length && !this.query)
+        out.push(this.note(t, "Recent sessions. Type to search them all; click one to reopen it in a new tab."));
       (rows ?? []).forEach((r, i) =>
         out.push(
           this.line(
             t,
             `hit-${i}`,
             [
-              [(r.ts ?? "").slice(0, 10), 80, t.dim],
+              [(r.ts ?? r.ended ?? r.started ?? "").slice(0, 10), 80, t.dim],
               [r.agent, 60, t.muted],
-              [short(r.title, 40), 230],
-              [r.snippet, null, t.muted],
+              [short(r.title ?? r.first_prompt, 40), 230],
+              [r.snippet ?? r.cwd, null, t.muted],
             ],
             r.resume_argv
               ? () => {

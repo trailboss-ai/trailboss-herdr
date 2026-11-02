@@ -72,7 +72,7 @@ In the background it runs `trailboss events` every 15 s, and notifies when an ag
 | Tab | Shows | Click a row to |
 |---|---|---|
 | Live | every running agent: terminal, status, cost so far, session; lost sessions and a Resume now button | go to its terminal |
-| Search | full-text search across every agent's sessions | reopen that session in a new tab, in its folder |
+| Sessions | recent sessions; type to full-text search every agent's sessions | reopen that session in a new tab, in its folder |
 | Usage | cost per day for two weeks; cost per model for 30 days | |
 | Quota | plan windows, % used, reset time, pace | |
 | Stats | merged PRs, agent cost per PR, time to merge (from GitHub through `gh`) | |
