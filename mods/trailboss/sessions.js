@@ -90,14 +90,22 @@ export class Sessions {
     return [r.agent, base(r.cwd), r.cwd, r.title, r.first_prompt, r.id].some((x) => (x ?? "").toLowerCase().includes(f));
   }
 
-  // The space whose folder holds `cwd`, the deepest one if several do.
+  // The space whose folder holds `cwd`, the deepest one if several do. Renders have a
+  // tight time budget, so spaces are read once per render and each folder looked up once.
   spaceFor(cwd) {
-    return spaces()
-      .filter((s) => under(cwd, s.folder))
-      .sort((a, b) => b.folder.length - a.folder.length)[0];
+    if (!this.deepest) this.prepareSpaces();
+    if (!this.spaceOf.has(cwd)) this.spaceOf.set(cwd, this.deepest.find((s) => under(cwd, s.folder)));
+    return this.spaceOf.get(cwd);
+  }
+
+  prepareSpaces() {
+    this.spaceList = spaces();
+    this.deepest = this.spaceList.filter((s) => s.folder).sort((a, b) => b.folder.length - a.folder.length);
+    this.spaceOf = new Map();
   }
 
   resume(r) {
+    this.prepareSpaces();
     const active = spaces().find((s) => s.active);
     const folder = r.cwd || active?.folder || home();
     const name = short(r.title ?? base(folder), 30);
@@ -220,13 +228,18 @@ export class Sessions {
     }
     if (scope === "spaces") {
       let n = 0;
-      for (const sp of spaces()) {
-        const mine = rows.filter((r) => this.spaceFor(r.cwd)?.id === sp.id);
+      const groups = new Map();
+      for (const r of rows) {
+        const sp = this.spaceFor(r.cwd);
+        if (sp) groups.set(sp.id, [...(groups.get(sp.id) ?? []), r]);
+      }
+      for (const sp of this.spaceList) {
+        const mine = groups.get(sp.id) ?? [];
         if (!mine.length) continue;
         out.push(div().px(8).pt(8).pb(2).text_size(11).text_color(t.dim).child(`${sp.name} (${mine.length})`));
         for (const r of mine) if (n++ < SHOWN) out.push(this.row(t, r, n));
       }
-      shown = rows.filter((r) => this.spaceFor(r.cwd));
+      shown = [...groups.values()].flat();
       if (shown.length > SHOWN) out.push(div().px(8).py(6).text_size(11).text_color(t.dim).child(`Showing ${SHOWN} of ${shown.length} — refine with filter`));
     } else {
       shown.slice(0, SHOWN).forEach((r, i) => out.push(this.row(t, r, i)));
@@ -253,6 +266,7 @@ export class Sessions {
 
   render() {
     const t = theme();
+    this.prepareSpaces();
     const scope = shared(SCOPE_KEY) ?? "folder";
     const agents = chosen();
     return v_flex()

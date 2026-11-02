@@ -18,17 +18,37 @@ const enabled = () => shared(ENABLED) ?? PROVIDERS;
 const countdowns = () => ({ codex: true, claude: true, cursor: false, ...(shared(COUNTDOWNS) ?? {}) });
 const snapshot = () => shared(KEY) ?? { at: null, rows: [], pending: false };
 
-async function refresh(only) {
+// A refresh that failed for a passing reason keeps a provider's last readings.
+const PASSING = ["rate limited", "offline"];
+
+export async function refresh(only) {
   const before = snapshot();
   setShared(KEY, { ...before, pending: true });
   try {
-    const rows = await tb(["quota", ...(only?.length ? ["--provider", only.join(",")] : [])]);
+    let rows = await tb(["quota", ...(only?.length ? ["--provider", only.join(",")] : [])]);
+    rows = rows.flatMap((r) => {
+      const last = before.rows.filter((b) => b.provider === r.provider && b.window);
+      if (!r.window && last.length && PASSING.some((p) => (r.note ?? "").includes(p))) {
+        return last.map((b) => ({ ...b, note: `${r.note}; showing earlier figures` }));
+      }
+      return [r];
+    });
     // A refresh of some providers keeps the others' rows.
     const kept = only?.length ? before.rows.filter((r) => !only.includes(r.provider)) : [];
     setShared(KEY, { at: Date.now(), rows: [...kept, ...rows], pending: false, error: null });
   } catch (e) {
     setShared(KEY, { ...before, pending: false, error: err(e) });
   }
+}
+
+/** Quota rows, read at most every `maxAgeMs`: views share one refresh instead of each
+ *  asking the providers (their usage endpoints rate-limit). */
+export async function quotaRows(maxAgeMs) {
+  const s = snapshot();
+  if (!s.at || Date.now() - s.at > maxAgeMs) {
+    if (!s.pending) await refresh(enabled());
+  }
+  return snapshot().rows;
 }
 
 function pct(u) {

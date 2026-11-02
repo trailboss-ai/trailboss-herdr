@@ -2,6 +2,7 @@ import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, theme, openOverlay, notify } from "herdr";
 import { MOD, findBin, tb, plural, money, ymd, short, MISSING } from "./lib.js";
+import { quotaRows } from "./quota.js";
 
 // The status-bar block: agents running, working / blocked, today's cost and the Claude
 // 5-hour window. It keeps `trailboss` tracking which session runs in which terminal (every
@@ -44,7 +45,8 @@ export class Block {
         const u = await tb(["usage", "--by", "all", "--since", ymd(new Date())]);
         this.today = u[0]?.cost_usd ?? 0;
       }
-      if (this.polls % QUOTA_EVERY === 0) this.quota = await tb(["quota"]).catch(() => this.quota);
+      // Shared with the quota strip: one refresh for both, at most every 5 minutes.
+      if (this.polls % QUOTA_EVERY === 0) this.quota = await quotaRows(5 * 60000).catch(() => this.quota);
       this.polls++;
       this.error = null;
     } catch (e) {
