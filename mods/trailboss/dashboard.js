@@ -46,6 +46,7 @@ export class Dashboard {
       } else if (tab === "Usage") {
         this.rows.Usage = await tb(["usage", "--by", "day", "--since", daysAgo(13)]);
         this.rows.Models = await tb(["usage", "--by", "model", "--since", daysAgo(29)]);
+        this.rows.Plans = await tb(["plans"]);
       } else if (tab === "Quota") {
         this.rows.Quota = await tb(["quota"]);
       } else if (tab === "Stats") {
@@ -262,6 +263,26 @@ export class Dashboard {
           ]),
         ),
       );
+      out.push(div().px(10).pt(14).pb(4).text_size(12).font_semibold().child("Plans: this billing cycle at API prices"));
+      const plans = this.rows.Plans ?? [];
+      if (plans.length) {
+        out.push(this.head(t, [["Plan", null], ["Price", 70], ["So far", 90], ["×", 50], ["Projected", 110], ["Last cycle", 110]]));
+        const x = (m) => (m == null ? "—" : `${m}×`);
+        plans.forEach((p, i) =>
+          out.push(
+            this.line(t, `plan-${i}`, [
+              [`${p.plan} (${p.agents})`, null],
+              [money(p.price_usd), 70, t.muted],
+              [money(p.cost_usd), 90],
+              [x(p.multiple), 50, (p.multiple ?? 0) >= 1 ? t.done : t.muted],
+              [`${money(p.projected_usd)} · ${x(p.projected_multiple)}`, 110, t.muted],
+              [`${money(p.last_cycle_usd)} · ${x(p.last_multiple)}`, 110, t.muted],
+            ]),
+          ),
+        );
+      } else {
+        out.push(this.note(t, "No plans set. Add yours: trailboss plans --add \"Claude Max\" --price 200 --agents claude [--renews 15]"));
+      }
       out.push(this.note(t, "At API list prices: what this usage would cost per token, not what your plan charges."));
     }
 
