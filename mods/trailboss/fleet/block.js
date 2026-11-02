@@ -1,8 +1,8 @@
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, theme, openOverlay, notify, shared } from "herdr";
-import { MOD, findBin, tb, plural, money, ymd, short, MISSING } from "./lib.js";
-import { quotaRows } from "./quota.js";
+import { MOD, findBin, tb, plural, money, ymd, short, MISSING } from "../lib.js";
+import { quotaRows } from "../usage/quota.js";
 
 // The status-bar block: agents running, working / blocked, today's cost and the Claude
 // 5-hour window. It keeps `trailboss` tracking which session runs in which terminal (every

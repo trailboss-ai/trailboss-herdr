@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, theme, run, spaces, panes, focused, watchFolder, notify, setShared, openOverlay, closeOverlay } from "herdr";
-import { tb, err, short } from "./lib.js";
+import { tb, err, short } from "../lib.js";
 import { parentOf, inside, within, dropDest } from "./paths.js";
 
 // Files for the folder you're working in, aware of agents: each changed file is badged with

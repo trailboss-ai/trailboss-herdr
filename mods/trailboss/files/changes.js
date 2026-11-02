@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, v_virtual_list } from "gpui-base";
 import { exec, theme, settings, run, watchFolder, writeTextFile, appHome, notify, openOverlay } from "herdr";
-import { tb, err, short } from "./lib.js";
+import { tb, err, short } from "../lib.js";
 import { here, trashPath, openInEditor } from "./files.js";
 import { parseDiff, hunkPatch, counts, rows, parseStatus } from "./diff.js";
 

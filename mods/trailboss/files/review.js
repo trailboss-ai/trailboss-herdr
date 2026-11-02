@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, v_virtual_list } from "gpui-base";
 import { theme, settings, closeOverlay } from "herdr";
-import { tb, err, short, age } from "./lib.js";
+import { tb, err, short, age } from "../lib.js";
 import { openInEditor } from "./files.js";
 
 // Review by agent session (a window, from the Changes panel): the sessions that changed

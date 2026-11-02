@@ -1,7 +1,7 @@
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Editor, EditorState } from "gpui-base";
 import { exec, theme, settings, home, readTextFile, shared, setShared, closeOverlay } from "herdr";
-import { tb, err, findBin, compact, duration, longDate, monthDay, money, plural, short } from "./lib.js";
+import { tb, err, findBin, compact, duration, longDate, monthDay, money, plural, short } from "../lib.js";
 
 // Usage insights, as a window (what the insights mod did): lifetime numbers and streaks, a
 // year heatmap, a token breakdown for any day, weekly top models and a model leaderboard

@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input } from "gpui-base";
 import { exec, theme, settings, readTextFile, writeTextFile, shared, appHome, notify } from "herdr";
-import { tb, short } from "./lib.js";
+import { tb, short } from "../lib.js";
 import { OPEN_KEY } from "./files.js";
 import { findAll, replaceNext, replaceAll } from "./find.js";
 

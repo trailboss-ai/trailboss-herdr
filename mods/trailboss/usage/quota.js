@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, openOverlay, closeOverlay, shared, setShared } from "herdr";
-import { MOD, tb, err } from "./lib.js";
+import { MOD, tb, err } from "../lib.js";
 
 // Plan quotas in the status bar, with a detail popup per provider and a provider picker
 // (what the usage-bar mod did). The strip refreshes every 2 minutes and shares its

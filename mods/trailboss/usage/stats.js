@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, shared, setShared } from "herdr";
-import { tb, err, money, monthDay } from "./lib.js";
+import { tb, err, money, monthDay } from "../lib.js";
 
 // Your delivery numbers in the side panel (what the stats mod did), plus what agent work
 // cost per pull request. GitHub is slow to ask, so results are kept for 30 minutes.

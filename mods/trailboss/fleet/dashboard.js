@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme, props, openOverlay, closeOverlay, notify, run } from "herdr";
-import { MOD, findBin, tb, plural, money, daysAgo, short, statusColor, MISSING } from "./lib.js";
+import { MOD, findBin, tb, plural, money, daysAgo, short, statusColor, MISSING } from "../lib.js";
 
 // The dashboard (Alt+Shift+T, or click the status block): Live, Search, Usage, Quota and
 // Stats, each one trailboss command, plus a button for the Insights window.

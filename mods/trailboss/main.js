@@ -1,15 +1,15 @@
 import { View } from "gpui-kit";
 import { props } from "herdr";
-import { Block } from "./block.js";
-import { Dashboard } from "./dashboard.js";
-import { QuotaStrip, QuotaDetail, QuotaPicker } from "./quota.js";
-import { Sessions, SessionAgents } from "./sessions.js";
-import { Stats } from "./stats.js";
-import { Insights } from "./insights.js";
-import { Files, FilesMenu } from "./files.js";
-import { EditorView } from "./editor.js";
-import { Changes } from "./changes.js";
-import { Review } from "./review.js";
+import { Block } from "./fleet/block.js";
+import { Dashboard } from "./fleet/dashboard.js";
+import { QuotaStrip, QuotaDetail, QuotaPicker } from "./usage/quota.js";
+import { Sessions, SessionAgents } from "./fleet/sessions.js";
+import { Stats } from "./usage/stats.js";
+import { Insights } from "./usage/insights.js";
+import { Files, FilesMenu } from "./files/files.js";
+import { EditorView } from "./files/editor.js";
+import { Changes } from "./files/changes.js";
+import { Review } from "./files/review.js";
 
 // Trailboss in Herdr: a thin frontend over the `trailboss` CLI's --json output. One mod,
 // several views, picked by the `view` prop a layout block or overlay passes:

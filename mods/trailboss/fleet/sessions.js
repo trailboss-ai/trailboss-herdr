@@ -1,7 +1,7 @@
 import { div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, theme, run, spaces, terminals, home, notify, openOverlay, shared, setShared, knownAgents } from "herdr";
-import { MOD, tb, err, age, short, shellWords, MISSING } from "./lib.js";
+import { MOD, tb, err, age, short, shellWords, MISSING } from "../lib.js";
 
 // Every agent's sessions in the side panel (what the session-history mod did): scoped to
 // this folder, grouped by space, or all; filtered by agent and text; and resumed, copied,
