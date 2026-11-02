@@ -49,7 +49,7 @@ ICONS = {"mods/stats/stats.svg": "mods/trailboss/icons/stats.svg",
          "mods/session-history/icon.svg": "mods/trailboss/icons/sessions.svg"}
 STATUS = "workspace-status"
 GENERATED = ("gpui-kit.d.ts", "herdr.d.ts", "jsconfig.json", "__pycache__")
-RELEASES = "https://github.com/manastalukdar/trailboss/releases/latest/download"
+RELEASES = "https://github.com/trailboss-ai/trailboss/releases/latest/download"
 BLOCK = {"id": MOD, "type": "block", "content": {"mod": MOD}, "size": {"px": 320}}
 
 
