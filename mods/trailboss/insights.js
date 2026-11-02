@@ -1,6 +1,6 @@
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Editor, EditorState } from "gpui-base";
-import { exec, theme, settings, home, readTextFile, shared, setShared } from "herdr";
+import { exec, theme, settings, home, readTextFile, shared, setShared, closeOverlay } from "herdr";
 import { tb, err, findBin, compact, duration, longDate, monthDay, money, plural, short } from "./lib.js";
 
 // Usage insights, as a window (what the insights mod did): lifetime numbers and streaks, a
@@ -902,6 +902,23 @@ export class Insights {
               .child(this.button(t, "refresh", "↻ Refresh", (_e, cx) => cx.spawn((cx) => this.load(cx, true))))
               .when(Boolean(this.data), (el) =>
                 el.child(this.button(t, "toggle", this.settingsOpen ? "Dashboard" : "Settings", (_e, cx) => this.toggleSettings(cx))),
+              )
+              // A window doesn't close with Esc, so it needs its own close button.
+              .when(Boolean(this.overlay), (el) =>
+                el.child(
+                  div()
+                    .id("close")
+                    .cursor_pointer()
+                    .px(8)
+                    .py(1)
+                    .rounded(6)
+                    .text_size(15)
+                    .text_color(t.muted)
+                    .hover((s) => s.bg(t.hover).text_color(t.foreground))
+                    .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+                    .on_click(() => closeOverlay(this.overlay))
+                    .child("×"),
+                ),
               ),
           )
           .children(body),
