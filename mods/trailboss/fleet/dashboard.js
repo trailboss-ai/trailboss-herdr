@@ -131,13 +131,14 @@ export class Dashboard {
             `live-${i}`,
             [
               [r.where, 260],
-              [r.status, 80, statusColor(t, r.status)],
+              r.stuck ? [`stuck ${r.quiet_min}m`, 80, t.blocked] : [r.status, 80, statusColor(t, r.status)],
               [money(r.cost_usd), 70, t.muted],
               r.shares_with?.length
                 ? [`same folder as ${r.shares_with.map((w) => w.split(" ")[0]).join(", ")} · ${r.title ?? r.cwd}`, null, t.working]
                 : [r.title ?? r.cwd, null, t.muted],
             ],
-            r.terminal
+            // Only Herdr's own terminals can be focused from here.
+            r.terminal && (r.host ?? "herdr") === "herdr"
               ? () => {
                   run("pane.focus", { terminal: r.terminal });
                   closeOverlay(this.overlay);

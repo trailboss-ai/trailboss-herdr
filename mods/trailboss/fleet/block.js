@@ -49,18 +49,29 @@ export class Block {
 
   // Herdr already notifies about agents in its own terminals; Trailboss covers the rest
   // (VS Code, plain terminals). Set shared "trailboss.notify.herdr" to true for all of them.
-  // Agents working in the same folder are Trailboss's own warning, wherever they run.
+  // Agents working in the same folder, and agents making no progress, are Trailboss's own
+  // warnings, wherever they run.
   announce(events) {
     const all = shared("trailboss.notify.herdr") === true;
     for (const e of events ?? []) {
       if (e.kind === "same_folder") {
-        const first = (e.terminals ?? []).find(Boolean);
+        const first = (e.terminals ?? []).find((t, i) => t && (e.hosts?.[i] ?? "herdr") === "herdr");
         notify({
           title: `${e.agents?.length ?? 2} agents are working in the same folder`,
           body: `${e.where}\n${e.cwd}`,
           level: "warning",
           icon: ICON,
           ...(first ? { action: { name: "pane.focus", args: { terminal: first } } } : {}),
+        });
+        continue;
+      }
+      if (e.kind === "stuck") {
+        notify({
+          title: `${e.agent} ${e.where ?? ""} has made no progress for ${e.quiet_min ?? 10} min`.replace(/ +/g, " "),
+          body: e.title ?? e.cwd ?? "",
+          level: "warning",
+          icon: ICON,
+          ...(e.terminal && e.in_herdr ? { action: { name: "pane.focus", args: { terminal: e.terminal } } } : {}),
         });
         continue;
       }
@@ -161,6 +172,7 @@ export class Block {
     const blocked = live.filter((r) => r.status === "blocked").length;
     const lost = this.live.filter((r) => (r.status ?? "").startsWith("lost")).length;
     const crowd = crowded(live);
+    const stuck = live.filter((r) => r.stuck).length;
     const five = this.quota.find((q) => q.provider === "claude" && q.window === "5h");
     const hot = (five?.pace_percent ?? 0) > 100;
     const sep = () => div().text_color(t.border).child("·");
@@ -191,6 +203,7 @@ export class Block {
               .child(plural(live.length, "agent"))
               .when(working > 0, (el) => el.child(div().text_color(t.working).child(`${working} working`)))
               .when(blocked > 0, (el) => el.child(div().text_color(t.blocked).child(`${blocked} waiting`)))
+              .when(stuck > 0, (el) => el.child(div().text_color(t.blocked).child(`⚠ ${stuck} stuck`)))
               .when(crowd.length > 0, (el) =>
                 el.child(div().text_color(t.blocked).child(`⚠ ${crowd.reduce((n, g) => n + g.length, 0)} in one folder`)),
               )
