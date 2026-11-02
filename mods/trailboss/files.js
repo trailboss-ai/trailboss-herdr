@@ -1,7 +1,8 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { exec, theme, run, spaces, panes, focused, watchFolder, notify, setShared } from "herdr";
+import { exec, theme, run, spaces, panes, focused, watchFolder, notify, setShared, openOverlay, closeOverlay } from "herdr";
 import { tb, err, short } from "./lib.js";
+import { parentOf, inside, within, dropDest } from "./paths.js";
 
 // Files for the folder you're working in, aware of agents: each changed file is badged with
 // the agent that changed it (exactly, from its edit tool, or probably, from when it changed
@@ -38,8 +39,6 @@ async function list(dir) {
 }
 
 const sh = (script, ...args) => exec("sh", ["-c", script, "sh", ...args]);
-const parentOf = (p) => p.replace(/\/[^/]+$/, "") || "/";
-const inside = (root, p) => p === root || p.startsWith(`${root}/`);
 
 // Opens a file in the editor pane of this tab, starting one beside the focused pane if
 // there isn't one yet. The editor picks the request up from shared state.
@@ -50,6 +49,14 @@ export function openInEditor(path) {
     run("pane.split", { direction: "right", mod: "trailboss", props: { view: "editor" } });
   }
 }
+
+// The file operations, shared by the panel, its context menu and dragging. Each refuses
+// to overwrite anything that exists, and keeps paths inside `root`.
+
+export const createFile = (path) => sh('mkdir -p -- "$(dirname -- "$1")" && set -C && : > "$1"', path); // noclobber
+export const createFolder = (path) => exec("mkdir", ["-p", "--", path]);
+export const movePath = (from, to) =>
+  sh('[ ! -e "$2" ] || { echo "$2 already exists" >&2; exit 1; }; mkdir -p -- "$(dirname -- "$2")" && mv -n -- "$1" "$2"', from, to);
 
 // Trash, never delete: gio (most desktops), else trash-cli.
 export function trashPath(path) {
@@ -160,22 +167,48 @@ export class Files {
     this.prompt = null;
     if (!name) return cx.notify();
     // Names and moves stay inside the folder shown.
-    const dest = kind === "rename" ? `${this.root}/${name}` : `${at}/${name}`;
-    const norm = dest.replace(/\/\.\//g, "/");
-    if (norm.includes("/../") || norm.endsWith("/..") || !inside(this.root, norm)) {
+    const norm = within(this.root, kind === "rename" ? this.root : at, name);
+    if (!norm) {
       notify({ title: "Stays inside this folder", body: name, level: "warning" });
       return cx.notify();
     }
-    let r;
-    if (kind === "new-folder") r = await exec("mkdir", ["-p", "--", norm]);
-    // noclobber: never overwrite an existing file.
-    else if (kind === "new-file") r = await sh('mkdir -p -- "$(dirname -- "$1")" && set -C && : > "$1"', norm);
-    else r = await sh('[ ! -e "$2" ] || { echo "$2 already exists" >&2; exit 1; }; mkdir -p -- "$(dirname -- "$2")" && mv -n -- "$1" "$2"', at, norm);
+    const r = kind === "new-folder" ? await createFolder(norm) : kind === "new-file" ? await createFile(norm) : await movePath(at, norm);
     if (r.code !== 0) notify({ title: "Couldn't do that", body: (r.stderr || r.stdout).trim(), level: "error" });
     else {
       this.open.add(parentOf(norm));
       this.selected = norm;
       if (kind === "new-file") openInEditor(norm);
+    }
+    for (const d of [...this.open]) await this.load(cx, d);
+  }
+
+  // The right-click menu, at the pointer.
+  menu(path, isDir) {
+    const items = isDir ? 6 : 7;
+    openOverlay({
+      mod: "trailboss",
+      props: { view: "files-menu", path, dir: isDir, root: this.root },
+      kind: "popup",
+      width: 230,
+      height: 34 + items * 27,
+    });
+  }
+
+  async drop(cx, to) {
+    const from = this.drag?.path;
+    this.drag = null;
+    this.dropOn = null;
+    this.dragged = true;
+    if (!from || !to) return cx.notify();
+    const name = from.split("/").pop();
+    const dest = dropDest(this.root, from, to); // null: not a move
+    if (!dest) return cx.notify();
+    const r = await movePath(from, dest);
+    if (r.code !== 0) notify({ title: `Couldn't move ${name}`, body: (r.stderr || "").trim(), level: "error" });
+    else {
+      notify({ title: `Moved ${name}`, body: `to ${to.slice(this.root.length) || "/"}`, level: "info", timeout: 2500 });
+      this.open.add(to);
+      this.selected = dest;
     }
     for (const d of [...this.open]) await this.load(cx, d);
   }
@@ -226,7 +259,35 @@ export class Files {
           .cursor_pointer()
           .when(sel, (el) => el.bg(t.selected))
           .hover((s) => s.bg(t.hover))
+          .on_mouse_down("right", (_e, cx) => {
+            cx.stop_propagation(); // the tree's own right-click is the top folder's menu
+            this.selected = path;
+            this.menu(path, e.dir);
+            cx.notify();
+          })
+          // Dragging: press, move a few pixels, release on a folder (or a file: its folder).
+          .on_mouse_down("left", (ev) => {
+            this.drag = { path, x: ev.position.x, y: ev.position.y, moved: false };
+          })
+          .on_hover((over, cx) => {
+            if (over && this.drag?.moved) {
+              this.dropOn = e.dir ? path : dir;
+              cx.notify();
+            }
+          })
+          .on_mouse_up("left", (_ev, cx) => {
+            if (this.drag?.moved) {
+              cx.stop_propagation();
+              cx.spawn((cx) => this.drop(cx, e.dir ? path : dir));
+            }
+          })
+          .when(Boolean(this.drag?.moved) && this.dropOn === path, (el) => el.border_1().border_color(t.accent))
           .on_click((_e, cx) => {
+            // The click that ends a drag isn't a click.
+            if (this.dragged) {
+              this.dragged = false;
+              return;
+            }
             this.selected = path;
             this.confirmTrash = null;
             if (e.dir) {
@@ -372,7 +433,161 @@ export class Files {
       )
       .when(Boolean(this.error), (el) => el.child(div().px(12).pb(6).text_size(11).text_color(t.blocked).child(this.error)))
       .when(!this.root, (el) => el.child(div().px(12).text_size(12).text_color(t.dim).child("Focus a terminal to see its folder.")))
-      .child(v_flex().id("tree").flex_1().min_h(0).px(4).pb(6).overflow_y_scrollbar().children(rows))
+      .child(
+        v_flex()
+          .id("tree")
+          .flex_1()
+          .min_h(0)
+          .px(4)
+          .pb(6)
+          .overflow_y_scrollbar()
+          .on_mouse_move((ev, cx) => {
+            const d = this.drag;
+            if (d && !d.moved && Math.abs(ev.position.x - d.x) + Math.abs(ev.position.y - d.y) > 5) {
+              d.moved = true;
+              cx.notify();
+            }
+          })
+          .on_mouse_up("left", (_ev, cx) => {
+            // Released on empty space: the folder shown. Elsewhere, a plain click ended.
+            if (this.drag?.moved) cx.spawn((cx) => this.drop(cx, this.dropOn ?? this.root));
+            else this.drag = null;
+          })
+          .on_mouse_down("right", () => {
+            if (this.root) this.menu(this.root, true);
+          })
+          .children(rows),
+      )
+      .when(Boolean(this.drag?.moved), (el) =>
+        el.child(
+          div()
+            .px(10)
+            .py(4)
+            .text_size(11)
+            .text_color(t.accent)
+            .child(`Move ${this.drag.path.split("/").pop()} to ${(this.dropOn ?? this.root).slice(this.root.length) || "/"}`),
+        ),
+      )
       .when(Boolean(this.footer(t)), (el) => el.child(this.footer(t)));
   }
+}
+
+// The right-click menu for a file or folder: open, add, rename or move, copy the path,
+// reveal, move to the trash. It works on its own; the panel sees the result through its
+// folder watch.
+export class FilesMenu {
+  init(p) {
+    this.p = p;
+    this.overlay = p.overlay;
+    this.input = null; // { kind, state }
+    this.confirm = false;
+    this.error = null;
+  }
+
+  close() {
+    closeOverlay(this.overlay);
+  }
+
+  ask(kind, cx) {
+    const { path, root } = this.p;
+    const value = kind === "rename" ? path.slice(root.length + 1) : "";
+    const state = InputState.new({ placeholder: kind === "rename" ? "new path" : kind === "folder" ? "folder name" : "file name", value });
+    state.on("submit", (_e, cx) => cx.spawn((cx) => this.done(cx, kind, state.value().trim())));
+    this.input = { kind, state };
+    state.focus();
+    cx.notify();
+  }
+
+  async done(cx, kind, name) {
+    const { path, root, dir } = this.p;
+    if (!name) return this.close();
+    const base = kind === "rename" ? root : dir ? path : parentOf(path);
+    const dest = within(root, base, name);
+    if (!dest) {
+      this.error = "Stays inside this folder.";
+      return cx.notify();
+    }
+    const r = kind === "folder" ? await createFolder(dest) : kind === "file" ? await createFile(dest) : await movePath(path, dest);
+    if (r.code !== 0) {
+      this.error = (r.stderr || "Couldn't do that.").trim();
+      return cx.notify();
+    }
+    if (kind === "file") openInEditor(dest);
+    this.close();
+  }
+
+  async trash(cx) {
+    const r = await trashPath(this.p.path);
+    if (r.code !== 0) {
+      this.error = (r.stderr || "").trim();
+      return cx.notify();
+    }
+    notify({ title: "Moved to trash", body: this.p.path, level: "info", timeout: 3000 });
+    this.close();
+  }
+
+  item(t, id, label, onClick, danger) {
+    return div()
+      .id(id)
+      .px(10)
+      .py(4)
+      .rounded(4)
+      .text_size(12.5)
+      .cursor_pointer()
+      .text_color(danger ? t.blocked : t.foreground)
+      .hover((s) => s.bg(t.hover))
+      .on_click(onClick)
+      .child(label);
+  }
+
+  render() {
+    const t = theme();
+    const { path, root, dir } = this.p;
+    const isRoot = path === root;
+    const name = path.split("/").pop();
+    const items = [];
+    if (this.input) {
+      items.push(
+        div().px(6).py(4).child(Input.new(this.input.state).h(26).px(6).rounded(4).border_1().border_color(t.accent).bg(t.background).text_size(12)),
+        div().px(10).text_size(10.5).text_color(t.dim).child("Enter to confirm, Esc to cancel"),
+      );
+    } else {
+      if (!dir) items.push(this.item(t, "open", "Open", () => (openInEditor(path), this.close())));
+      items.push(
+        this.item(t, "new-file", "New file…", (_e, cx) => this.ask("file", cx)),
+        this.item(t, "new-folder", "New folder…", (_e, cx) => this.ask("folder", cx)),
+      );
+      if (!isRoot) items.push(this.item(t, "rename", "Rename / move…", (_e, cx) => this.ask("rename", cx)));
+      items.push(
+        this.item(t, "copy", "Copy path", () =>
+          copyText(path).then(() => this.close()),
+        ),
+        this.item(t, "reveal", "Reveal in file manager", () => (exec("xdg-open", [dir ? path : parentOf(path)]), this.close())),
+      );
+      if (!isRoot)
+        items.push(
+          this.confirm
+            ? this.item(t, "trash-yes", `Move ${short(name, 18)} to trash?`, (_e, cx) => cx.spawn((cx) => this.trash(cx)), true)
+            : this.item(t, "trash", "Move to trash", (_e, cx) => {
+                this.confirm = true;
+                cx.notify();
+              }, true),
+        );
+    }
+    return v_flex()
+      .id("root")
+      .size_full()
+      .p(4)
+      .gap(1)
+      .bg(t.popover)
+      .text_color(t.foreground)
+      .child(div().px(10).py(3).truncate().text_size(10.5).text_color(t.dim).child(isRoot ? name || path : path.slice(root.length + 1)))
+      .children(items)
+      .when(Boolean(this.error), (el) => el.child(div().px(10).py(3).text_size(11).text_color(t.blocked).child(short(this.error, 120))));
+  }
+}
+
+// Copy text to the clipboard (Wayland, else X11).
+function copyText(text) {
+  return exec("sh", ["-c", 'printf %s "$1" | wl-copy 2>/dev/null || printf %s "$1" | xclip -selection clipboard', "sh", text]);
 }

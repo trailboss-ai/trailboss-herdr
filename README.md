@@ -36,7 +36,7 @@ Their blocks in your layouts become trailboss views, with the same ids and sizes
 python3 integrations/herdr/install.py --take-over-files     # --give-back-files undoes it
 ```
 
-Your layout's Files panel becomes trailboss's: the focused terminal's repository (or folder), with each changed file badged with the agent that changed it. A solid badge means exactly, from the agent's edit tool. An outlined `agent?` badge means probably, because the file changed while only that agent was working there. Folders with changes inside get a dot, and the footer says which session made the change and when. Create files and folders, rename or move, and move to the trash (never deleted; `gio`, else `trash-cli`). Everything stays inside the folder shown.
+Your layout's Files panel becomes trailboss's: the focused terminal's repository (or folder), with each changed file badged with the agent that changed it. A solid badge means exactly, from the agent's edit tool. An outlined `agent?` badge means probably, because the file changed while only that agent was working there. Folders with changes inside get a dot, and the footer says which session made the change and when. **Right-click** a file or folder (or empty space, for the top folder) for its menu: Open, New file, New folder, Rename / move, Copy path, Reveal in file manager, Move to trash (asks first). **Drag** a file or folder onto another folder (or a file, meaning its folder, or empty space, meaning the top) to move it there. The toolbar does the same as the menu. Nothing is ever deleted outright: "delete" moves to the trash (`gio`, else `trash-cli`). Nothing overwrites an existing file, and everything stays inside the folder shown.
 
 Files open in a **multi-tab editor** pane beside the terminal. It works alongside agents:
 
@@ -50,13 +50,19 @@ Files open in a **multi-tab editor** pane beside the terminal. It works alongsid
 - **Commit** commits what's staged, or with nothing staged, everything (as Herdr's own Changes does).
 - Git reads take no locks, so the panel never gets in the way of an agent running git in the same repository.
 
+**Review by session:** the Changes panel's **By session ↗** opens a window:
+- **Left:** the agent sessions that changed files in this repository.
+- **Right:** the chosen session's files. Each shows whether it was modified or created, whether it's back as it was, and who changed it since.
+- **Click a file** for its before → now diff.
+- **Undo file…** or **Undo session…** (each asks first) puts files back as they were before the session, from Claude Code's own backups. It skips files another session changed later, never touches agents' own folders, and keeps what it replaces in trailboss's undo folder.
+
 Local folders only.
 
 ## What it does
 
 **The block** shows agents running, how many are working or waiting for you, today's cost at API prices, and the Claude 5-hour window with its pace (red when it's on track to run out). A **Resume N** button appears when a terminal has lost its agent. Click the block for the dashboard.
 
-In the background it runs `trailboss live` every 15 s, which also records which session runs in which terminal. When Herdr starts it runs `trailboss resume --auto`, which brings back what a reboot lost (after a Herdr restart alone, use the button). A notification says what came back and what didn't, and why.
+In the background it runs `trailboss events` every 15 s, and notifies when an agent outside Herdr's own terminals (VS Code, a plain terminal) needs you or finishes a turn of 30 s or more. Herdr notifies about its own terminals itself. Each look also records which session runs in which terminal. When Herdr starts it runs `trailboss resume --auto`, which brings back what a reboot lost (after a Herdr restart alone, use the button). A notification says what came back and what didn't, and why.
 
 **The dashboard** (Alt+Shift+T, or click the block):
 

@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { exec, theme, openOverlay, notify } from "herdr";
+import { exec, theme, openOverlay, notify, shared } from "herdr";
 import { MOD, findBin, tb, plural, money, ymd, short, MISSING } from "./lib.js";
 import { quotaRows } from "./quota.js";
 
@@ -36,11 +36,31 @@ export class Block {
     cx.timer.every(POLL_MS, (cx) => cx.spawn((cx) => this.poll(cx)));
   }
 
+  // Herdr already notifies about agents in its own terminals; trailboss covers the rest
+  // (VS Code, plain terminals). Set shared "trailboss.notify.herdr" to true for all of them.
+  announce(events) {
+    const all = shared("trailboss.notify.herdr") === true;
+    for (const e of events ?? []) {
+      if (e.kind === "ended" || (e.in_herdr && !all)) continue;
+      const who = `${e.agent} ${e.where ?? ""}`.trim();
+      const mins = Math.floor((e.worked_ms ?? 0) / 60000);
+      notify({
+        title: e.kind === "needs_you" ? `${who} needs you` : `${who} finished${mins ? ` after ${mins} min` : ""}`,
+        body: e.title ?? e.cwd ?? "",
+        level: e.kind === "needs_you" ? "warning" : "success",
+        ...(e.terminal && e.in_herdr ? { action: { name: "pane.focus", args: { terminal: e.terminal } } } : {}),
+      });
+    }
+  }
+
   async poll(cx) {
     if (!this.bin || this.busy) return;
     this.busy = true;
     try {
-      this.live = await tb(["live"]);
+      // `events` is `live` plus what changed since the last look.
+      const { live, events } = await tb(["events"]);
+      this.live = live;
+      this.announce(events);
       if (this.polls % TODAY_EVERY === 0) {
         const u = await tb(["usage", "--by", "all", "--since", ymd(new Date())]);
         this.today = u[0]?.cost_usd ?? 0;

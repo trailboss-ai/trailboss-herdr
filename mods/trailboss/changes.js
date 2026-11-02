@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, v_virtual_list } from "gpui-base";
-import { exec, theme, settings, run, watchFolder, writeTextFile, appHome, notify } from "herdr";
+import { exec, theme, settings, run, watchFolder, writeTextFile, appHome, notify, openOverlay } from "herdr";
 import { tb, err, short } from "./lib.js";
 import { here, trashPath, openInEditor } from "./files.js";
 import { parseDiff, hunkPatch, counts, rows, parseStatus } from "./diff.js";
@@ -305,6 +305,13 @@ export class Changes {
           .items_center()
           .child(div().text_size(13).font_semibold().child("Changes"))
           .child(div().flex_1().truncate().text_size(11).text_color(t.dim).child(this.branch ?? ""))
+          .when(Boolean(this.root), (el) =>
+            el.child(
+              this.small(t, "by-session", "By session ↗", () =>
+                openOverlay({ mod: "trailboss", props: { view: "review", root: this.root }, kind: "window", key: "trailboss-review", width: 1000, height: 700 }),
+              ),
+            ),
+          )
           .child(
             div()
               .id("hide")
