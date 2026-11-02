@@ -18,6 +18,18 @@ The installer:
 
 **Replacing agent-resume-plus:** the installer refuses while it's installed, because both would resume the same terminals after a reboot. Uninstall it first (`python3 <herdr-agent-resume-plus>/scripts/install.py --uninstall`). Trailboss starts tracking from scratch; agent-resume-plus's tracked sessions aren't carried over.
 
+## Replacing insights, session-history, stats and usage-bar
+
+Trailboss does everything those four mods do ([parity checklist](../../docs/parity.md)). To swap them out:
+
+```sh
+python3 integrations/herdr/install.py --update                # the current mod first
+python3 integrations/herdr/install.py --take-over --dry-run   # see what changes
+python3 integrations/herdr/install.py --take-over
+```
+
+Their blocks in your layouts become trailboss views, with the same ids and sizes, so panel buttons keep working: Sessions and Stats in the side panel, quotas in the status bar. Icons other mods borrowed from them (tabs-plus) now point at trailboss's. The four mods are removed through Herdr's package manager, which keeps them in `data/pkg/removed/`. The layouts and edited mods are backed up in `data/trailboss/backups/`. Insights opens from the dashboard's **Insights ↗** button.
+
 ## What it does
 
 **The block** shows agents running, how many are working or waiting for you, today's cost at API prices, and the Claude 5-hour window with its pace (red when it's on track to run out). A **Resume N** button appears when a terminal has lost its agent. Click the block for the dashboard.

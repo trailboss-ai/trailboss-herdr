@@ -4,6 +4,8 @@
   python3 integrations/herdr/install.py              install
   python3 integrations/herdr/install.py --update     copy the mod over an earlier install
   python3 integrations/herdr/install.py --uninstall  take it out of your layouts and keys, remove the mod
+  python3 integrations/herdr/install.py --take-over  put trailboss where insights, session-history,
+                                                     stats and usage-bar were, then remove those mods
   add --dry-run to any of them to see what would change
 
 It needs the trailboss CLI installed (cargo install --path .). It copies mods/trailboss,
@@ -29,6 +31,11 @@ HERE = Path(__file__).resolve().parent
 MOD = "trailboss"
 # Both would type resume commands into the same terminals after a reboot.
 REPLACES = "agent-resume-plus"
+# Mods trailboss replaces with its own views (docs/parity.md), and the view each block becomes.
+TAKES_OVER = {"session-history": "sessions", "stats": "stats", "usage-bar": "quota", "insights": None}
+# Icons other mods (tabs-plus) borrow from the mods being removed.
+ICONS = {"mods/stats/stats.svg": "mods/trailboss/icons/stats.svg",
+         "mods/session-history/icon.svg": "mods/trailboss/icons/sessions.svg"}
 STATUS = "workspace-status"
 GENERATED = ("gpui-kit.d.ts", "herdr.d.ts", "jsconfig.json", "__pycache__")
 BLOCK = {"id": MOD, "type": "block", "content": {"mod": MOD}, "size": {"px": 320}}
@@ -89,11 +96,69 @@ def drop_block(node):
     return n
 
 
+def take_over_blocks(node):
+    """Point blocks of the replaced mods at trailboss views, keeping their ids and sizes."""
+    n = 0
+    if isinstance(node, dict):
+        c = node.get("content")
+        if node.get("type") == "block" and isinstance(c, dict) and TAKES_OVER.get(c.get("mod")):
+            node["content"] = {"mod": MOD, "props": {"view": TAKES_OVER[c["mod"]]}}
+            n += 1
+        n += sum(take_over_blocks(v) for v in node.values())
+    elif isinstance(node, list):
+        n += sum(take_over_blocks(v) for v in node)
+    return n
+
+
+def take_over(home, shipped, dry):
+    if not (home / "mods" / MOD).exists():
+        sys.exit(f"Install trailboss first (without --take-over).")
+    backups = home / "data" / MOD / "backups"
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    for f in sorted((home / "layouts").glob("*.json")):
+        if f"layout:{f.stem}" in shipped:
+            continue
+        tree = json.loads(f.read_text())
+        if n := take_over_blocks(tree):
+            print(f"{dry}{f.name}: {n} block(s) now show trailboss")
+            if not dry:
+                backups.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(f, backups / f"{f.stem}.{stamp}.json")
+                f.write_text(json.dumps(tree, indent=2) + "\n")
+    for js in sorted((home / "mods").glob("*/*.js")):
+        if js.parent.name in TAKES_OVER or js.parent.name == MOD:
+            continue
+        text = js.read_text()
+        new = text
+        for old, ours in ICONS.items():
+            new = new.replace(old, ours)
+        if new != text:
+            print(f"{dry}mods/{js.parent.name}/{js.name}: icons now from mods/{MOD}/icons")
+            if not dry:
+                backups.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(js, backups / f"{js.parent.name}-{js.name}.{stamp}")
+                js.write_text(new)
+    pkg = home / "mods" / "pkg" / "pkg.py"
+    for name in TAKES_OVER:
+        if not (home / "mods" / name).exists():
+            continue
+        print(f"{dry}remove mods/{name} (kept in data/pkg/removed/ or data/{MOD}/backups/)")
+        if dry:
+            continue
+        r = subprocess.run([sys.executable, str(pkg), "remove", name, "--force"], capture_output=True, text=True) \
+            if pkg.exists() else None
+        if not r or r.returncode or '"ok": false' in (r.stdout or ""):
+            # Not tracked by herdr-pkg: move it aside ourselves.
+            backups.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(home / "mods" / name), str(backups / f"mod-{name}.{stamp}"))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--update", action="store_true")
     ap.add_argument("--uninstall", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--take-over", action="store_true")
     a = ap.parse_args()
     home = Path(os.environ.get("HERDR_APP_HOME", Path.home() / ".config/herdr-app"))
     if not (home / "layouts").is_dir():
@@ -103,6 +168,10 @@ def main():
     keys_path = home / "keys.json"
     keys = json.loads(keys_path.read_text()) if keys_path.exists() else {}
     ours = json.loads((HERE / "keys.json").read_text())
+
+    if a.take_over:
+        take_over(home, shipped, dry)
+        return
 
     if a.uninstall:
         for f in sorted((home / "layouts").glob("*.json")):
