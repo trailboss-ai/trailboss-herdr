@@ -1,7 +1,7 @@
-import { div } from "gpui-kit";
+import { div, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme, props, openOverlay, closeOverlay, notify, run } from "herdr";
-import { MOD, findBin, tb, plural, money, daysAgo, short, statusColor, MISSING } from "../lib.js";
+import { MOD, ICON, findBin, tb, plural, money, daysAgo, short, statusColor, MISSING } from "../lib.js";
 
 // The dashboard (Alt+Shift+T, or click the status block): Live, Search, Usage, Quota and
 // Stats, each one trailboss command, plus a button for the Insights window.
@@ -352,6 +352,7 @@ export class Dashboard {
           .items_center()
           .border_b(1)
           .border_color(t.border)
+          .child(image(ICON).w(18).h(18).mr(4))
           .child(div().pr(10).text_size(13).font_semibold().child("Trailboss"))
           .children(
             TABS.map((name) =>

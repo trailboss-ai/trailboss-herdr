@@ -1,7 +1,7 @@
-import { div } from "gpui-kit";
+import { div, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, theme, openOverlay, notify, shared } from "herdr";
-import { MOD, findBin, tb, plural, money, ymd, short, MISSING } from "../lib.js";
+import { MOD, ICON, findBin, tb, plural, money, ymd, short, MISSING } from "../lib.js";
 import { quotaRows } from "../usage/quota.js";
 
 // The status-bar block: agents running, working / blocked, today's cost and the Claude
@@ -48,6 +48,7 @@ export class Block {
         title: e.kind === "needs_you" ? `${who} needs you` : `${who} finished${mins ? ` after ${mins} min` : ""}`,
         body: e.title ?? e.cwd ?? "",
         level: e.kind === "needs_you" ? "warning" : "success",
+        icon: ICON,
         ...(e.terminal && e.in_herdr ? { action: { name: "pane.focus", args: { terminal: e.terminal } } } : {}),
       });
     }
@@ -148,6 +149,7 @@ export class Block {
           .cursor_pointer()
           .hover((s) => s.text_color(t.foreground))
           .on_click(() => this.openDashboard())
+          .child(image(ICON).w(14).h(14))
           .when(Boolean(this.error), (el) => el.child(div().text_color(t.blocked).child(short(`trailboss: ${this.error}`, 70))))
           .when(!this.error, (el) =>
             el

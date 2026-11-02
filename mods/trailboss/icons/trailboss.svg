@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Trailboss">
+  <title>Trailboss</title>
+  <rect width="128" height="128" rx="28" fill="#1d2230"/>
+  <!-- the trail boss leads; the fleet follows in formation, each leaving its own trail -->
+  <g transform="translate(4 -2) rotate(40 64 64)">
+    <path d="M44 80 V124" stroke="#7aa2f7" fill="none" stroke-linecap="round" stroke-dasharray="0.1 8" stroke-width="3.2" opacity="0.6"/>
+    <path d="M84 80 V124" stroke="#9ece6a" fill="none" stroke-linecap="round" stroke-dasharray="0.1 8" stroke-width="3.2" opacity="0.6"/>
+    <path d="M64 98 V128" stroke="#bb9af7" fill="none" stroke-linecap="round" stroke-dasharray="0.1 8" stroke-width="3.2" opacity="0.6"/>
+    <path d="M64 14 L83 46 L64 38 L45 46 Z" fill="#e8a33d"/>
+    <circle cx="44" cy="74" r="8.5" fill="#7aa2f7"/>
+    <circle cx="84" cy="74" r="8.5" fill="#9ece6a"/>
+    <circle cx="64" cy="92" r="8" fill="#bb9af7"/>
+  </g>
+</svg>

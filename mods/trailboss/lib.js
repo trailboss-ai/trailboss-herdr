@@ -2,6 +2,8 @@
 import { exec, home } from "herdr";
 
 export const MOD = "trailboss";
+// The Trailboss mark (docs/brand/mark.svg), as a path in Herdr's home folder.
+export const ICON = `mods/${MOD}/icons/trailboss.svg`;
 
 // Apps started from a desktop launcher can miss ~/.cargo/bin on PATH.
 let found;
