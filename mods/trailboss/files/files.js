@@ -184,7 +184,7 @@ export class Files {
 
   // The right-click menu, at the pointer.
   menu(path, isDir) {
-    const items = isDir ? 6 : 7;
+    const items = isDir ? 8 : 9;
     openOverlay({
       mod: "trailboss",
       props: { view: "files-menu", path, dir: isDir, root: this.root },
@@ -559,9 +559,9 @@ export class FilesMenu {
       );
       if (!isRoot) items.push(this.item(t, "rename", "Rename / move…", (_e, cx) => this.ask("rename", cx)));
       items.push(
-        this.item(t, "copy", "Copy path", () =>
-          copyText(path).then(() => this.close()),
-        ),
+        this.item(t, "copy-name", "Copy name", () => copyText(name).then(() => this.close())),
+        this.item(t, "copy", "Copy full path", () => copyText(path).then(() => this.close())),
+        this.item(t, "copy-rel", "Copy relative path", () => copyText(isRoot ? "." : path.slice(root.length + 1)).then(() => this.close())),
         this.item(t, "reveal", "Reveal in file manager", () => (exec("xdg-open", [dir ? path : parentOf(path)]), this.close())),
       );
       if (!isRoot)
