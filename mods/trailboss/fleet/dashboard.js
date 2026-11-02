@@ -400,6 +400,18 @@ export class Dashboard {
               .hover((s) => s.text_color(t.foreground))
               .on_click((_e, cx) => cx.spawn((cx) => this.load(cx, this.tab)))
               .child(this.loading[this.tab] ? "…" : "↻"),
+          )
+          .child(
+            div()
+              .id("close")
+              .cursor_pointer()
+              .px(8)
+              .text_size(12)
+              .text_color(t.dim)
+              .hover((s) => s.text_color(t.foreground))
+              .tooltip("Close (Esc)")
+              .on_click(() => closeOverlay(this.overlay))
+              .child("✕"),
           ),
       )
       .child(v_flex().id("tb-body").flex_1().min_h(0).p(8).gap(1).overflow_y_scrollbar().children(this.body(t)));
