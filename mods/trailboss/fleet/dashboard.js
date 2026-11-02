@@ -50,8 +50,9 @@ export class Dashboard {
       } else if (tab === "Quota") {
         this.rows.Quota = await tb(["quota"]);
       } else if (tab === "Stats") {
+        // One GitHub round: the summary carries the per-PR rows under `prs`.
         this.rows.Stats = await tb(["stats"]);
-        this.rows.Prs = await tb(["stats", "--prs"]);
+        this.rows.Prs = this.rows.Stats[0]?.prs ?? [];
       }
       this.errors[tab] = null;
     } catch (e) {
