@@ -1,6 +1,6 @@
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { theme, props, closeOverlay, notify, run } from "herdr";
+import { theme, props, closeOverlay, notify, run, shared, setShared } from "herdr";
 import { liveTree } from "./tree.js";
 import { openInsights } from "../usage/insights.js";
 import { ICON, findBin, tb, plural, money, daysAgo, short, statusColor, MISSING } from "../lib.js";
@@ -9,6 +9,8 @@ import { ICON, findBin, tb, plural, money, daysAgo, short, statusColor, MISSING 
 // Stats, each one Trailboss command, plus a button for the Insights window.
 
 const TABS = ["Live", "Sessions", "Usage", "Quota", "Stats"];
+// The last `trailboss stats` result, shared with the Stats side panel (same shape there).
+const STATS_KEY = "trailboss.stats";
 
 export class Dashboard {
   init(p, cx) {
@@ -71,9 +73,20 @@ export class Dashboard {
       } else if (tab === "Quota") {
         this.rows.Quota = await tb(["quota"]);
       } else if (tab === "Stats") {
+        // GitHub takes seconds: show the last result now, marked stale, while it answers.
+        const last = shared(STATS_KEY);
+        if (!this.rows.Stats && last?.s) {
+          this.rows.Stats = [last.s];
+          this.rows.Prs = last.s.prs ?? [];
+          this.statsAt = last.at;
+          cx.notify();
+        }
         // One GitHub round: the summary carries the per-PR rows under `prs`.
-        this.rows.Stats = await tb(["stats"]);
-        this.rows.Prs = this.rows.Stats[0]?.prs ?? [];
+        const rows = await tb(["stats"]);
+        this.rows.Stats = rows;
+        this.rows.Prs = rows[0]?.prs ?? [];
+        this.statsAt = Date.now();
+        if (rows[0]) setShared(STATS_KEY, { at: this.statsAt, s: rows[0] });
       }
       this.errors[tab] = null;
     } catch (e) {
@@ -377,6 +390,10 @@ export class Dashboard {
 
     if (tab === "Stats") {
       const s = (this.rows.Stats ?? [])[0];
+      if (s && this.loading.Stats && this.statsAt) {
+        const m = Math.round((Date.now() - this.statsAt) / 60000);
+        out.push(this.note(t, `Asking GitHub… showing the result from ${m < 1 ? "just now" : m < 60 ? `${m}m ago` : `${Math.round(m / 60)}h ago`}`));
+      }
       if (s) {
         const ai = Object.entries(s.ai_marked ?? {})
           .map(([k, v]) => `${k} ${v}`)
