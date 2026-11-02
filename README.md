@@ -71,7 +71,7 @@ In the background it runs `trailboss events` every 15 s, and notifies when an ag
 
 | Tab | Shows | Click a row to |
 |---|---|---|
-| Live | every running agent: terminal, status, cost so far, session; lost sessions and a Resume now button | go to its terminal |
+| Live | every running agent: terminal, status, cost so far, session. **By folder** (default) puts each folder's agents under its heading (⚠ when more than one is working) and indents agents under the agent that started them; **List** shows one row each. Lost sessions and a Resume now button | go to its terminal |
 | Sessions | recent sessions; type to full-text search every agent's sessions | reopen that session in a new tab, in its folder |
 | Usage | cost per day for two weeks; cost per model for 30 days | |
 | Quota | plan windows, % used, reset time, pace | |

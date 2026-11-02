@@ -1,6 +1,7 @@
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme, props, openOverlay, closeOverlay, notify, run } from "herdr";
+import { liveTree } from "./tree.js";
 import { MOD, ICON, findBin, tb, plural, money, daysAgo, short, statusColor, MISSING } from "../lib.js";
 
 // The dashboard (Alt+Shift+T, or click the status block): Live, Sessions, Usage, Quota and
@@ -146,19 +147,60 @@ export class Dashboard {
 
     if (tab === "Live") {
       const rows = this.rows.Live ?? [];
+      const tree = this.liveView !== "list";
+      out.push(
+        h_flex()
+          .px(10)
+          .pb(6)
+          .gap(10)
+          .text_size(11.5)
+          .children(
+            [["tree", "By folder"], ["list", "List"]].map(([v, label]) =>
+              div()
+                .id(`view-${v}`)
+                .cursor_pointer()
+                .text_color((v === "tree") === tree ? t.foreground : t.dim)
+                .hover((s) => s.text_color(t.foreground))
+                .on_click((_e, cx) => {
+                  this.liveView = v;
+                  cx.notify();
+                })
+                .child(label),
+            ),
+          ),
+      );
       out.push(this.head(t, [["Where", 260], ["Status", 80], ["Cost", 70], ["Session", null]]));
-      rows.forEach((r, i) =>
+      // By folder: agents sharing a folder under one heading, sub-agents indented under the
+      // agent that started them. List: one row each, as `live` returns them.
+      const lines = tree ? liveTree(rows) : rows.map((row) => ({ row, depth: 0 }));
+      lines.forEach(({ group: g, row: r, depth }, i) => {
+        if (g) {
+          // More than one agent working in one folder can overwrite each other's changes.
+          const busy = g.working > 1;
+          out.push(
+            div()
+              .px(10)
+              .pt(8)
+              .pb(2)
+              .text_size(11.5)
+              .text_color(busy ? t.working : t.dim)
+              .child(`${busy ? "⚠ " : ""}${g.name} · ${g.count} ${g.count === 1 ? "agent" : "agents"}${g.working ? ` · ${g.working} working` : ""}`),
+          );
+          return;
+        }
+        const sharing = r.shares_with?.length ?? 0;
+        const parent = r.parent ? `↳ from ${r.parent.split(" ")[0]} · ` : "";
         out.push(
           this.line(
             t,
             `live-${i}`,
             [
-              [r.where, 260],
+              [`${"   ".repeat(depth)}${depth ? "└ " : ""}${r.where}`, 260],
               r.stuck ? [`stuck ${r.quiet_min}m`, 80, t.blocked] : [r.status, 80, statusColor(t, r.status)],
               [money(r.cost_usd), 70, t.muted],
-              r.shares_with?.length
-                ? [`same folder as ${r.shares_with.map((w) => w.split(" ")[0]).join(", ")} · ${r.title ?? r.cwd}`, null, t.working]
-                : [r.title ?? r.cwd, null, t.muted],
+              !tree && sharing
+                ? [`${parent}⇄ ${sharing + 1} in folder · ${r.title ?? r.cwd}`, null, t.working]
+                : [`${tree ? "" : parent}${r.title ?? r.cwd ?? ""}`, null, t.muted],
             ],
             // Only Herdr's own terminals can be focused from here.
             r.terminal && (r.host ?? "herdr") === "herdr"
@@ -168,8 +210,8 @@ export class Dashboard {
                 }
               : null,
           ),
-        ),
-      );
+        );
+      });
       if (!rows.length && this.rows.Live) out.push(this.note(t, "No agents running."));
       const lost = this.rows.Lost ?? [];
       if (lost.length) {
