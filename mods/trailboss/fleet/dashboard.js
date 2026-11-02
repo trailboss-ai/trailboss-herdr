@@ -133,7 +133,9 @@ export class Dashboard {
               [r.where, 260],
               [r.status, 80, statusColor(t, r.status)],
               [money(r.cost_usd), 70, t.muted],
-              [r.title ?? r.cwd, null, t.muted],
+              r.shares_with?.length
+                ? [`same folder as ${r.shares_with.map((w) => w.split(" ")[0]).join(", ")} · ${r.title ?? r.cwd}`, null, t.working]
+                : [r.title ?? r.cwd, null, t.muted],
             ],
             r.terminal
               ? () => {

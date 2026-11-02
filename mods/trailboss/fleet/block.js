@@ -13,6 +13,15 @@ const POLL_MS = 15000;
 const TODAY_EVERY = 4; // polls between cost refreshes (~1 min)
 const QUOTA_EVERY = 20; // polls between quota checks (~5 min): those go to the network
 
+// Workspaces where two or more agents are working at once: they can overwrite each other.
+export function crowded(live) {
+  const by = {};
+  for (const r of live ?? []) {
+    if (r.workspace && (r.status === "working" || r.status === "busy")) (by[r.workspace] ??= []).push(r);
+  }
+  return Object.values(by).filter((rs) => rs.length > 1);
+}
+
 export class Block {
   init(_props, cx) {
     this.bin = null;
@@ -38,9 +47,21 @@ export class Block {
 
   // Herdr already notifies about agents in its own terminals; Trailboss covers the rest
   // (VS Code, plain terminals). Set shared "trailboss.notify.herdr" to true for all of them.
+  // Agents working in the same folder are Trailboss's own warning, wherever they run.
   announce(events) {
     const all = shared("trailboss.notify.herdr") === true;
     for (const e of events ?? []) {
+      if (e.kind === "same_folder") {
+        const first = (e.terminals ?? []).find(Boolean);
+        notify({
+          title: `${e.agents?.length ?? 2} agents are working in the same folder`,
+          body: `${e.where}\n${e.cwd}`,
+          level: "warning",
+          icon: ICON,
+          ...(first ? { action: { name: "pane.focus", args: { terminal: first } } } : {}),
+        });
+        continue;
+      }
       if (e.kind === "ended" || (e.in_herdr && !all)) continue;
       const who = `${e.agent} ${e.where ?? ""}`.trim();
       const mins = Math.floor((e.worked_ms ?? 0) / 60000);
@@ -126,6 +147,7 @@ export class Block {
     const working = live.filter((r) => r.status === "working" || r.status === "busy").length;
     const blocked = live.filter((r) => r.status === "blocked").length;
     const lost = this.live.filter((r) => (r.status ?? "").startsWith("lost")).length;
+    const crowd = crowded(live);
     const five = this.quota.find((q) => q.provider === "claude" && q.window === "5h");
     const hot = (five?.pace_percent ?? 0) > 100;
     const sep = () => div().text_color(t.border).child("·");
@@ -156,6 +178,9 @@ export class Block {
               .child(plural(live.length, "agent"))
               .when(working > 0, (el) => el.child(div().text_color(t.working).child(`${working} working`)))
               .when(blocked > 0, (el) => el.child(div().text_color(t.blocked).child(`${blocked} waiting`)))
+              .when(crowd.length > 0, (el) =>
+                el.child(div().text_color(t.blocked).child(`⚠ ${crowd.reduce((n, g) => n + g.length, 0)} in one folder`)),
+              )
               .when(this.today != null, (el) => el.child(sep()).child(`${money(this.today)} today`))
               .when(Boolean(five), (el) =>
                 el.child(sep()).child(
