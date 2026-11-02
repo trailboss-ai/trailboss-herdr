@@ -30,6 +30,22 @@ python3 integrations/herdr/install.py --take-over
 
 Their blocks in your layouts become trailboss views, with the same ids and sizes, so panel buttons keep working: Sessions and Stats in the side panel, quotas in the status bar. Icons other mods borrowed from them (tabs-plus) now point at trailboss's. The four mods are removed through Herdr's package manager, which keeps them in `data/pkg/removed/`. The layouts and edited mods are backed up in `data/trailboss/backups/`. Insights opens from the dashboard's **Insights ↗** button.
 
+## Files and editor, agent-aware (opt-in)
+
+```sh
+python3 integrations/herdr/install.py --take-over-files     # --give-back-files undoes it
+```
+
+Your layout's Files panel becomes trailboss's: the focused terminal's repository (or folder), with each changed file badged with the agent that changed it. A solid badge means exactly, from the agent's edit tool. An outlined `agent?` badge means probably, because the file changed while only that agent was working there. Folders with changes inside get a dot, and the footer says which session made the change and when. Create files and folders, rename or move, and move to the trash (never deleted; `gio`, else `trash-cli`). Everything stays inside the folder shown.
+
+Files open in a **multi-tab editor** pane beside the terminal. It works alongside agents:
+
+- **Saving never overwrites an agent's edit unseen.** A save only lands if the file is still what you opened. If it changed, you see which agent probably changed it, and can **Compare** (a diff in its own tab), **Reload**, or **Overwrite with mine**.
+- **Live:** a file you haven't touched reloads by itself when an agent changes it, and says who.
+- **Keys:** Ctrl+S saves, Ctrl+W closes (asking first if unsaved), Ctrl+Tab switches. Files over 1 MB and binary files open with a notice instead.
+
+Local folders only.
+
 ## What it does
 
 **The block** shows agents running, how many are working or waiting for you, today's cost at API prices, and the Claude 5-hour window with its pace (red when it's on track to run out). A **Resume N** button appears when a terminal has lost its agent. Click the block for the dashboard.

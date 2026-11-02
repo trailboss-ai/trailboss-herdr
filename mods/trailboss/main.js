@@ -6,6 +6,8 @@ import { QuotaStrip, QuotaDetail, QuotaPicker } from "./quota.js";
 import { Sessions, SessionAgents } from "./sessions.js";
 import { Stats } from "./stats.js";
 import { Insights } from "./insights.js";
+import { Files } from "./files.js";
+import { EditorView } from "./editor.js";
 
 // Trailboss in Herdr: a thin frontend over the `trailboss` CLI's --json output. One mod,
 // several views, picked by the `view` prop a layout block or overlay passes:
@@ -17,6 +19,8 @@ import { Insights } from "./insights.js";
 //   sessions        the session list for the side panel (replaces session-history)
 //   stats           delivery stats for the side panel (replaces stats)
 //   insights        usage insights, as a window (replaces insights)
+//   files           agent-aware files for the side panel (replaces Files)
+//   editor          the multi-tab editor pane files open in
 //   quota-detail, quota-picker, session-agents: their popups
 
 const VIEWS = {
@@ -27,6 +31,8 @@ const VIEWS = {
   "session-agents": SessionAgents,
   stats: Stats,
   insights: Insights,
+  files: Files,
+  editor: EditorView,
 };
 
 export default class Trailboss extends View {
