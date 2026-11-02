@@ -6,7 +6,7 @@ import { tb, err, findBin, compact, duration, longDate, monthDay, money, plural,
 // Usage insights, as a window (what the insights mod did): lifetime numbers and streaks, a
 // year heatmap, a token breakdown for any day, weekly top models and a model leaderboard
 // against the previous period, with periods and filters; and settings for the view, the
-// sources trailboss reads, and the config itself. Ported in shape from the insights mod
+// sources Trailboss reads, and the config itself. Ported in shape from the insights mod
 // (MIT, Gagan Devagiri; see THIRD_PARTY_NOTICES.md), which also made the logos.
 
 const PREFS = "trailboss.insights.prefs";
@@ -111,7 +111,7 @@ export class Insights {
     if (this.loading) return;
     this.loading = true;
     cx.notify();
-    // Every trailboss command indexes what's new first; show how far a long scan is.
+    // Every Trailboss command indexes what's new first; show how far a long scan is.
     const progressFile = `${home()}/.local/share/trailboss/scan-progress.json`;
     let watching = true;
     cx.spawn(async (cx) => {
@@ -743,7 +743,7 @@ export class Insights {
       this.card(
         t,
         "Sources",
-        "what trailboss reads; changes save to ~/.config/trailboss/config.json",
+        "what Trailboss reads; changes save to ~/.config/trailboss/config.json",
         rows.length
           ? rows.map((s, i) => {
               const inp = this.rootInputs[s.source];

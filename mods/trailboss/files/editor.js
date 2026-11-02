@@ -521,7 +521,7 @@ export class EditorView {
                 .p(20)
                 .text_size(12.5)
                 .text_color(t.dim)
-                .child("Open a file from the trailboss Files panel. Ctrl+S saves, Ctrl+W closes, Ctrl+Tab switches."),
+                .child("Open a file from the Trailboss Files panel. Ctrl+S saves, Ctrl+W closes, Ctrl+Tab switches."),
             ),
           ),
       )

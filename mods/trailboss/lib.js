@@ -1,4 +1,4 @@
-// Shared by every trailboss view: finding and running the CLI, and formatting.
+// Shared by every Trailboss view: finding and running the CLI, and formatting.
 import { exec, home } from "herdr";
 
 export const MOD = "trailboss";
@@ -17,7 +17,7 @@ export async function findBin() {
   return (found = null);
 }
 
-export const MISSING = "trailboss isn't installed (cargo install --path <trailboss repo>)";
+export const MISSING = "The trailboss CLI isn't installed (cargo install --path <Trailboss repo>)";
 
 // Runs `trailboss --json <args>` and parses its output.
 export async function tb(args) {

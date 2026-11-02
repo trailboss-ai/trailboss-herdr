@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Install the trailboss mod into Herdr app.
+"""Install the Trailboss mod into Herdr app.
 
   python3 integrations/herdr/install.py              install
   python3 integrations/herdr/install.py --update     copy the mod over an earlier install
   python3 integrations/herdr/install.py --uninstall  take it out of your layouts and keys, remove the mod
-  python3 integrations/herdr/install.py --take-over  put trailboss where insights, session-history,
+  python3 integrations/herdr/install.py --take-over  put Trailboss where insights, session-history,
                                                      stats and usage-bar were, then remove those mods
   python3 integrations/herdr/install.py --take-over-files   show trailboss's agent-aware Files in the
                                                      Files panel (opt-in; --give-back-files undoes it)
@@ -12,7 +12,7 @@
                                                      (--give-back-changes undoes it)
   add --dry-run to any of them to see what would change
 
-It needs the trailboss CLI installed (cargo install --path .). It copies mods/trailboss,
+It needs the Trailboss CLI installed (cargo install --path .). It copies mods/trailboss,
 binds alt-shift-t to the dashboard (refusing a key already in use), and adds the mod's
 320px block at the right of the current layout's status bar: it has to be in the layout
 to keep tracking sessions and to resume them after a reboot. Herdr's own layouts (main,
@@ -35,7 +35,7 @@ HERE = Path(__file__).resolve().parent
 MOD = "trailboss"
 # Both would type resume commands into the same terminals after a reboot.
 REPLACES = "agent-resume-plus"
-# Mods trailboss replaces with its own views (docs/parity.md), and the view each block becomes.
+# Mods Trailboss replaces with its own views (docs/parity.md), and the view each block becomes.
 TAKES_OVER = {"session-history": "sessions", "stats": "stats", "usage-bar": "quota", "insights": None}
 # Icons other mods (tabs-plus) borrow from the mods being removed.
 ICONS = {"mods/stats/stats.svg": "mods/trailboss/icons/stats.svg",
@@ -101,7 +101,7 @@ def drop_block(node):
 
 
 def take_over_blocks(node):
-    """Point blocks of the replaced mods at trailboss views, keeping their ids and sizes."""
+    """Point blocks of the replaced mods at Trailboss views, keeping their ids and sizes."""
     n = 0
     if isinstance(node, dict):
         c = node.get("content")
@@ -119,7 +119,7 @@ PANELS = {"files": ("files", "files-wrap"), "changes": ("changes", "changes-wrap
 
 
 def swap_panel(node, view, give_back):
-    """Point a panel's blocks at trailboss (remembering which mod was there), or back again."""
+    """Point a panel's blocks at Trailboss (remembering which mod was there), or back again."""
     n = 0
     if isinstance(node, dict):
         c = node.get("content")
@@ -139,7 +139,7 @@ def swap_panel(node, view, give_back):
 
 def panel(home, shipped, dry, view, give_back):
     if not (home / "mods" / MOD).exists():
-        sys.exit("Install trailboss first.")
+        sys.exit("Install Trailboss first.")
     stamp = time.strftime("%Y%m%d-%H%M%S")
     done = 0
     for f in sorted((home / "layouts").glob("*.json")):
@@ -149,7 +149,7 @@ def panel(home, shipped, dry, view, give_back):
         if n := swap_panel(tree, view, give_back):
             done += n
             name = view.capitalize()
-            what = f"the previous {name} panel again" if give_back else f"trailboss's agent-aware {name}"
+            what = f"the previous {name} panel again" if give_back else f"Trailboss's agent-aware {name}"
             print(f"{dry}{f.name}: {n} block(s) now show {what}")
             if not dry:
                 backups = home / "data" / MOD / "backups"
@@ -162,7 +162,7 @@ def panel(home, shipped, dry, view, give_back):
 
 def take_over(home, shipped, dry):
     if not (home / "mods" / MOD).exists():
-        sys.exit(f"Install trailboss first (without --take-over).")
+        sys.exit(f"Install Trailboss first (without --take-over).")
     backups = home / "data" / MOD / "backups"
     stamp = time.strftime("%Y%m%d-%H%M%S")
     for f in sorted((home / "layouts").glob("*.json")):
@@ -263,7 +263,7 @@ def main():
     bin_ = shutil.which("trailboss") or next(
         (str(p) for p in (Path.home() / ".cargo/bin/trailboss", Path.home() / ".local/bin/trailboss") if p.exists()), None)
     if not bin_:
-        sys.exit("The trailboss CLI isn't installed. From the trailboss repo: cargo install --path .")
+        sys.exit("The Trailboss CLI isn't installed. From the Trailboss repo: cargo install --path .")
     print(f"using {bin_}")
     dest = home / "mods" / MOD
     if dest.exists() and not a.update:

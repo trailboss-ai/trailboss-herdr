@@ -12,7 +12,7 @@ const SCOPES = [
   ["spaces", "Spaces"],
   ["all", "All"],
 ];
-// What trailboss reads sessions from (src/sources.rs).
+// What Trailboss reads sessions from (src/sources.rs).
 export const AGENTS = [
   "claude", "codex", "opencode", "pi", "gemini", "cursor", "droid", "muse", "qoder", "codebuddy", "kimi", "kiro",
   "copilot", "grok", "omp", "devin", "openclaw", "antigravity", "prime", "zcode", "hermes", "cline", "rovo", "jcode",

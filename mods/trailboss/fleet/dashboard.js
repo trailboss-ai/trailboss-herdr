@@ -4,7 +4,7 @@ import { theme, props, openOverlay, closeOverlay, notify, run } from "herdr";
 import { MOD, ICON, findBin, tb, plural, money, daysAgo, short, statusColor, MISSING } from "../lib.js";
 
 // The dashboard (Alt+Shift+T, or click the status block): Live, Search, Usage, Quota and
-// Stats, each one trailboss command, plus a button for the Insights window.
+// Stats, each one Trailboss command, plus a button for the Insights window.
 
 const TABS = ["Live", "Search", "Usage", "Quota", "Stats"];
 

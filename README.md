@@ -1,11 +1,11 @@
 # Trailboss for Herdr
 
-A [Herdr](https://herdr.dev) mod: trailboss in the status bar and a dashboard on **Alt+Shift+T**. It's a thin frontend: everything it shows comes from the `trailboss` CLI's `--json` output.
+A [Herdr](https://herdr.dev) mod: Trailboss in the status bar and a dashboard on **Alt+Shift+T**. It's a thin frontend: everything it shows comes from the `trailboss` CLI's `--json` output.
 
 ## Install
 
 ```sh
-cargo install --path .                    # from the trailboss repo: the CLI the mod runs
+cargo install --path .                    # from the Trailboss repo: the CLI the mod runs
 python3 integrations/herdr/install.py     # --dry-run first to see what it changes
 ```
 
@@ -28,7 +28,7 @@ python3 integrations/herdr/install.py --take-over --dry-run   # see what changes
 python3 integrations/herdr/install.py --take-over
 ```
 
-Their blocks in your layouts become trailboss views, with the same ids and sizes, so panel buttons keep working: Sessions and Stats in the side panel, quotas in the status bar. Icons other mods borrowed from them (tabs-plus) now point at trailboss's. The four mods are removed through Herdr's package manager, which keeps them in `data/pkg/removed/`. The layouts and edited mods are backed up in `data/trailboss/backups/`. Insights opens from the dashboard's **Insights ↗** button.
+Their blocks in your layouts become Trailboss views, with the same ids and sizes, so panel buttons keep working: Sessions and Stats in the side panel, quotas in the status bar. Icons other mods borrowed from them (tabs-plus) now point at trailboss's. The four mods are removed through Herdr's package manager, which keeps them in `data/pkg/removed/`. The layouts and edited mods are backed up in `data/trailboss/backups/`. Insights opens from the dashboard's **Insights ↗** button.
 
 ## Files and editor, agent-aware (opt-in)
 

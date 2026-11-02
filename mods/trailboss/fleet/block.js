@@ -36,7 +36,7 @@ export class Block {
     cx.timer.every(POLL_MS, (cx) => cx.spawn((cx) => this.poll(cx)));
   }
 
-  // Herdr already notifies about agents in its own terminals; trailboss covers the rest
+  // Herdr already notifies about agents in its own terminals; Trailboss covers the rest
   // (VS Code, plain terminals). Set shared "trailboss.notify.herdr" to true for all of them.
   announce(events) {
     const all = shared("trailboss.notify.herdr") === true;
@@ -78,7 +78,7 @@ export class Block {
     cx.notify();
   }
 
-  // `auto` (at start): trailboss itself only acts if the machine rebooted since it last saw
+  // `auto` (at start): Trailboss itself only acts if the machine rebooted since it last saw
   // these terminals. By hand: everything lost.
   async resume(cx, auto) {
     if (!this.bin) return;
@@ -150,7 +150,7 @@ export class Block {
           .hover((s) => s.text_color(t.foreground))
           .on_click(() => this.openDashboard())
           .child(image(ICON).w(14).h(14))
-          .when(Boolean(this.error), (el) => el.child(div().text_color(t.blocked).child(short(`trailboss: ${this.error}`, 70))))
+          .when(Boolean(this.error), (el) => el.child(div().text_color(t.blocked).child(short(`Trailboss: ${this.error}`, 70))))
           .when(!this.error, (el) =>
             el
               .child(plural(live.length, "agent"))

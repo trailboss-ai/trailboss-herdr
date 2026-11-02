@@ -7,7 +7,7 @@ import { parentOf, inside, within, dropDest } from "./paths.js";
 // Files for the folder you're working in, aware of agents: each changed file is badged with
 // the agent that changed it (exactly, from its edit tool, or probably, from when it changed
 // and who was working there), from `trailboss changes --worktree`. Create, rename, move and
-// trash files; open them in the trailboss editor. Local folders only (v1).
+// trash files; open them in the Trailboss editor. Local folders only (v1).
 
 const PER_FOLDER = 500;
 const ATTRIBUTE_MS = 15000;
@@ -339,7 +339,7 @@ export class Files {
       : m
         ? m.candidates
           ? `Changed; ${m.candidates} agent sessions were working here then`
-          : "Changed; not by an agent trailboss saw"
+          : "Changed; not by an agent Trailboss saw"
         : null;
     return v_flex()
       .px(10)

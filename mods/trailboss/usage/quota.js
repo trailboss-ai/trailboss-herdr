@@ -85,7 +85,7 @@ function state(provider) {
   };
 }
 
-// Errors from trailboss, as a heading and what to do.
+// Errors from Trailboss, as a heading and what to do.
 function explain(provider, note) {
   if (!note) return ["Not signed in", `Sign in to ${NAMES[provider]} on this machine, then refresh.`];
   if (note.includes("expired")) return ["Sign-in expired", `Open ${NAMES[provider]} once to refresh its sign-in.`];
