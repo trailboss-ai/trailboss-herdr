@@ -403,17 +403,19 @@ export class Dashboard {
           ["With agent sessions", s.with_agent_sessions],
           ["Agent cost matched to PRs", money(s.cost_usd)],
           ["Per PR with agent work", money(s.cost_per_pr_usd)],
+          ["Incl. work on main (est.)", `${money(s.estimated_cost_usd)} · ${money(s.estimated_cost_per_pr_usd)} per PR`],
           ["Median time to merge", s.median_hours_to_merge == null ? "—" : `${s.median_hours_to_merge}h`],
           ["Marked as AI-made", ai],
           ["Open", `${s.open}${s.oldest_open_days != null ? `, oldest ${s.oldest_open_days} days` : ""}`],
         ].forEach(([k, v], i) => out.push(this.line(t, `stat-${i}`, [[k, 200, t.muted], [v, null]])));
         out.push(div().px(10).pt(14).pb(4).text_size(12).font_semibold().child("Pull requests"));
-        out.push(this.head(t, [["Merged", 80], ["Cost", 70], ["Sessions", 64], ["PR", 230], ["Title", null]]));
+        out.push(this.head(t, [["Merged", 80], ["Cost", 70], ["Est.", 70], ["Sessions", 64], ["PR", 230], ["Title", null]]));
         (this.rows.Prs ?? []).slice(0, 60).forEach((p, i) =>
           out.push(
             this.line(t, `pr-${i}`, [
               [p.merged, 80, t.dim],
               [money(p.cost_usd), 70, p.cost_usd ? t.foreground : t.dim],
+              [p.estimated_cost_usd != null && p.estimated_cost_usd !== p.cost_usd ? `est. ${money(p.estimated_cost_usd)}` : "", 70, t.muted],
               [p.agent_sessions || "", 64, t.muted],
               [p.pr, 230, t.muted],
               [p.title, null],

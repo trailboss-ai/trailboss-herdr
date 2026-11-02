@@ -185,6 +185,10 @@ export class Stats {
           .text_size(10.5)
           .text_color(t.dim)
           .child(`${n(s.with_agent_sessions)} had agent sessions on their branch · ${money(s.cost_per_pr_usd)} each`),
+        div()
+          .text_size(10.5)
+          .text_color(t.dim)
+          .child(`est. ${money(s.estimated_cost_per_pr_usd)} each with work on main before each PR`),
       ]),
     );
 
