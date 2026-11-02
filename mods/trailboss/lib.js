@@ -17,7 +17,7 @@ export async function findBin() {
   return (found = null);
 }
 
-export const MISSING = "The trailboss CLI isn't installed (cargo install --path <Trailboss repo>)";
+export const MISSING = "The trailboss CLI isn't installed (install.py --get-cli, or cargo install --path <Trailboss repo>)";
 
 // Runs `trailboss --json <args>` and parses its output.
 export async function tb(args) {

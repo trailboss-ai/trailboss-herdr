@@ -10,9 +10,11 @@
                                                      Files panel (opt-in; --give-back-files undoes it)
   python3 integrations/herdr/install.py --take-over-changes the same for the Changes panel
                                                      (--give-back-changes undoes it)
+  python3 integrations/herdr/install.py --get-cli    download the latest CLI release to
+                                                     ~/.local/bin (Linux x86_64 / aarch64)
   add --dry-run to any of them to see what would change
 
-It needs the Trailboss CLI installed (cargo install --path .). It copies mods/trailboss,
+It needs the Trailboss CLI installed: --get-cli, a release archive, or cargo install --path . It copies mods/trailboss,
 binds alt-shift-t to the dashboard (refusing a key already in use), and adds the mod's
 320px block at the right of the current layout's status bar: it has to be in the layout
 to keep tracking sessions and to resume them after a reboot. Herdr's own layouts (main,
@@ -23,7 +25,12 @@ data/trailboss/backups/.
 Adapted from herdr-agent-resume-plus's installer (same author, MIT).
 """
 import argparse
+import hashlib
+import io
 import json
+import platform
+import tarfile
+import urllib.request
 import os
 import shutil
 import subprocess
@@ -42,7 +49,36 @@ ICONS = {"mods/stats/stats.svg": "mods/trailboss/icons/stats.svg",
          "mods/session-history/icon.svg": "mods/trailboss/icons/sessions.svg"}
 STATUS = "workspace-status"
 GENERATED = ("gpui-kit.d.ts", "herdr.d.ts", "jsconfig.json", "__pycache__")
+RELEASES = "https://github.com/manastalukdar/trailboss/releases/latest/download"
 BLOCK = {"id": MOD, "type": "block", "content": {"mod": MOD}, "size": {"px": 320}}
+
+
+def get_cli(dry):
+    """Download the latest release for this machine, check it against SHA256SUMS, and put the
+    binary in ~/.local/bin."""
+    arch = {"x86_64": "x86_64", "amd64": "x86_64", "aarch64": "aarch64", "arm64": "aarch64"}.get(platform.machine().lower())
+    if sys.platform != "linux" or not arch:
+        sys.exit(f"No release build for {sys.platform} {platform.machine()}. Build it: cargo install --path .")
+    name = f"trailboss-{arch}-unknown-linux-musl"
+    dest = Path.home() / ".local/bin/trailboss"
+    print(f"{dry}download {RELEASES}/{name}.tar.gz to {dest}")
+    if dry:
+        return
+    fetch = lambda f: urllib.request.urlopen(f"{RELEASES}/{f}", timeout=60).read()
+    data = fetch(f"{name}.tar.gz")
+    sums = dict(line.split()[::-1] for line in fetch("SHA256SUMS").decode().splitlines() if line.strip())
+    if sums.get(f"{name}.tar.gz") != hashlib.sha256(data).hexdigest():
+        sys.exit("The download doesn't match its published checksum; nothing was installed.")
+    with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+        binary = tar.extractfile(f"{name}/trailboss")
+        if binary is None:
+            sys.exit("The release archive has no trailboss binary; nothing was installed.")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_suffix(".new")
+        tmp.write_bytes(binary.read())
+    tmp.chmod(0o755)
+    tmp.replace(dest)
+    print(subprocess.run([str(dest), "--version"], capture_output=True, text=True).stdout.strip(), "installed")
 
 
 def herdr(*args):
@@ -206,6 +242,7 @@ def take_over(home, shipped, dry):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--update", action="store_true")
+    ap.add_argument("--get-cli", action="store_true")
     ap.add_argument("--uninstall", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--take-over", action="store_true")
@@ -214,6 +251,8 @@ def main():
     ap.add_argument("--take-over-changes", action="store_true")
     ap.add_argument("--give-back-changes", action="store_true")
     a = ap.parse_args()
+    if a.get_cli:
+        return get_cli("(dry run) " if a.dry_run else "")
     home = Path(os.environ.get("HERDR_APP_HOME", Path.home() / ".config/herdr-app"))
     if not (home / "layouts").is_dir():
         sys.exit(f"No Herdr app home at {home}. Start Herdr app once, or set HERDR_APP_HOME.")
@@ -263,7 +302,8 @@ def main():
     bin_ = shutil.which("trailboss") or next(
         (str(p) for p in (Path.home() / ".cargo/bin/trailboss", Path.home() / ".local/bin/trailboss") if p.exists()), None)
     if not bin_:
-        sys.exit("The Trailboss CLI isn't installed. From the Trailboss repo: cargo install --path .")
+        sys.exit("The Trailboss CLI isn't installed. Get a release build with --get-cli, "
+                 "or from the Trailboss repo: cargo install --path .")
     print(f"using {bin_}")
     dest = home / "mods" / MOD
     if dest.exists() and not a.update:
