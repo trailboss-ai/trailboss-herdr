@@ -17,7 +17,7 @@ const agentColor = (t, a) => AGENT_COLORS[a] ?? t.accent;
 const STATUS_COLORS = (t) => ({ M: t.working, A: t.done, "??": t.done, D: t.blocked, R: t.accent });
 
 // The folder to show: the focused pane's, else the active space's.
-function here() {
+export function here() {
   const f = focused();
   const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
   return pane?.cwd || f?.cwd || spaces().find((s) => s.active)?.folder || null;
@@ -49,6 +49,18 @@ export function openInEditor(path) {
   if (!panes().some((p) => p.mod === "trailboss" && p.tab === tab)) {
     run("pane.split", { direction: "right", mod: "trailboss", props: { view: "editor" } });
   }
+}
+
+// Trash, never delete: gio (most desktops), else trash-cli.
+export function trashPath(path) {
+  // Each tool may refuse (gio won't trash on system mounts like /tmp); then try the next.
+  // Nothing is ever deleted outright.
+  return sh(
+    'if command -v gio >/dev/null && gio trash -- "$1"; then exit 0; fi; ' +
+      'if command -v trash-put >/dev/null && trash-put -- "$1"; then exit 0; fi; ' +
+      'echo "Couldn\'t move it to the trash here (install gio or trash-cli); nothing was deleted." >&2; exit 1',
+    path,
+  );
 }
 
 export class Files {
@@ -168,17 +180,9 @@ export class Files {
     for (const d of [...this.open]) await this.load(cx, d);
   }
 
-  // Trash, never delete: gio (GNOME, most desktops), else trash-cli.
   async trash(cx, path) {
     this.confirmTrash = null;
-    // Each tool may refuse (gio won't trash on system mounts like /tmp); then try the next.
-    // Nothing is ever deleted outright.
-    const r = await sh(
-      'if command -v gio >/dev/null && gio trash -- "$1"; then exit 0; fi; ' +
-        'if command -v trash-put >/dev/null && trash-put -- "$1"; then exit 0; fi; ' +
-        'echo "Couldn\'t move it to the trash here (install gio or trash-cli); nothing was deleted." >&2; exit 1',
-      path,
-    );
+    const r = await trashPath(path);
     if (r.code !== 0) notify({ title: "Couldn't move to trash", body: (r.stderr || "").trim(), level: "error" });
     else {
       notify({ title: "Moved to trash", body: path, level: "info", timeout: 3000 });

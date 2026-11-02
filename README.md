@@ -44,6 +44,12 @@ Files open in a **multi-tab editor** pane beside the terminal. It works alongsid
 - **Live:** a file you haven't touched reloads by itself when an agent changes it, and says who.
 - **Keys:** Ctrl+S saves, Ctrl+W closes (asking first if unsaved), Ctrl+Tab switches. Files over 1 MB and binary files open with a notice instead.
 
+**Changes**, the same way (`--take-over-changes`, undone by `--give-back-changes`), shows the repository's uncommitted work in Staged and Changes sections. Each file has its +/− counts and the badge of the agent that changed it.
+- Click a file for its diff.
+- Stage, unstage or discard **a whole file or a single hunk**. Discarding asks first; discarding an untracked file moves it to the trash.
+- **Commit** commits what's staged, or with nothing staged, everything (as Herdr's own Changes does).
+- Git reads take no locks, so the panel never gets in the way of an agent running git in the same repository.
+
 Local folders only.
 
 ## What it does

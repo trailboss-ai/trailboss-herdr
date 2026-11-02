@@ -8,6 +8,7 @@ import { Stats } from "./stats.js";
 import { Insights } from "./insights.js";
 import { Files } from "./files.js";
 import { EditorView } from "./editor.js";
+import { Changes } from "./changes.js";
 
 // Trailboss in Herdr: a thin frontend over the `trailboss` CLI's --json output. One mod,
 // several views, picked by the `view` prop a layout block or overlay passes:
@@ -21,6 +22,7 @@ import { EditorView } from "./editor.js";
 //   insights        usage insights, as a window (replaces insights)
 //   files           agent-aware files for the side panel (replaces Files)
 //   editor          the multi-tab editor pane files open in
+//   changes         agent-aware git changes for the side panel (replaces Changes)
 //   quota-detail, quota-picker, session-agents: their popups
 
 const VIEWS = {
@@ -33,6 +35,7 @@ const VIEWS = {
   insights: Insights,
   files: Files,
   editor: EditorView,
+  changes: Changes,
 };
 
 export default class Trailboss extends View {

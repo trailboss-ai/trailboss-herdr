@@ -8,6 +8,8 @@
                                                      stats and usage-bar were, then remove those mods
   python3 integrations/herdr/install.py --take-over-files   show trailboss's agent-aware Files in the
                                                      Files panel (opt-in; --give-back-files undoes it)
+  python3 integrations/herdr/install.py --take-over-changes the same for the Changes panel
+                                                     (--give-back-changes undoes it)
   add --dry-run to any of them to see what would change
 
 It needs the trailboss CLI installed (cargo install --path .). It copies mods/trailboss,
@@ -112,30 +114,30 @@ def take_over_blocks(node):
     return n
 
 
-# Herdr's own Files panel (or a clone of it) and trailboss's agent-aware one.
-FILES_MODS = ("files", "files-wrap")
+# Herdr's own panels (or clones of them) that trailboss's agent-aware views can replace.
+PANELS = {"files": ("files", "files-wrap"), "changes": ("changes", "changes-wrap")}
 
 
-def swap_files(node, give_back):
-    """Point Files blocks at trailboss (remembering which mod was there), or back again."""
+def swap_panel(node, view, give_back):
+    """Point a panel's blocks at trailboss (remembering which mod was there), or back again."""
     n = 0
     if isinstance(node, dict):
         c = node.get("content")
         if node.get("type") == "block" and isinstance(c, dict):
             props = c.get("props") or {}
-            if not give_back and c.get("mod") in FILES_MODS:
-                node["content"] = {"mod": MOD, "props": {"view": "files", "was": c["mod"]}}
+            if not give_back and c.get("mod") in PANELS[view]:
+                node["content"] = {"mod": MOD, "props": {"view": view, "was": c["mod"]}}
                 n += 1
-            elif give_back and c.get("mod") == MOD and props.get("view") == "files":
-                node["content"] = {"mod": props.get("was") or "files"}
+            elif give_back and c.get("mod") == MOD and props.get("view") == view:
+                node["content"] = {"mod": props.get("was") or view}
                 n += 1
-        n += sum(swap_files(v, give_back) for v in node.values())
+        n += sum(swap_panel(v, view, give_back) for v in node.values())
     elif isinstance(node, list):
-        n += sum(swap_files(v, give_back) for v in node)
+        n += sum(swap_panel(v, view, give_back) for v in node)
     return n
 
 
-def files_panel(home, shipped, dry, give_back):
+def panel(home, shipped, dry, view, give_back):
     if not (home / "mods" / MOD).exists():
         sys.exit("Install trailboss first.")
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -144,9 +146,10 @@ def files_panel(home, shipped, dry, give_back):
         if f"layout:{f.stem}" in shipped:
             continue
         tree = json.loads(f.read_text())
-        if n := swap_files(tree, give_back):
+        if n := swap_panel(tree, view, give_back):
             done += n
-            what = "the previous Files panel again" if give_back else "trailboss's agent-aware Files"
+            name = view.capitalize()
+            what = f"the previous {name} panel again" if give_back else f"trailboss's agent-aware {name}"
             print(f"{dry}{f.name}: {n} block(s) now show {what}")
             if not dry:
                 backups = home / "data" / MOD / "backups"
@@ -154,7 +157,7 @@ def files_panel(home, shipped, dry, give_back):
                 shutil.copy2(f, backups / f"{f.stem}.{stamp}.json")
                 f.write_text(json.dumps(tree, indent=2) + "\n")
     if not done:
-        print("No Files panel to swap in your layouts." if not give_back else "Nothing to give back.")
+        print(f"No {view.capitalize()} panel to swap in your layouts." if not give_back else "Nothing to give back.")
 
 
 def take_over(home, shipped, dry):
@@ -208,6 +211,8 @@ def main():
     ap.add_argument("--take-over", action="store_true")
     ap.add_argument("--take-over-files", action="store_true")
     ap.add_argument("--give-back-files", action="store_true")
+    ap.add_argument("--take-over-changes", action="store_true")
+    ap.add_argument("--give-back-changes", action="store_true")
     a = ap.parse_args()
     home = Path(os.environ.get("HERDR_APP_HOME", Path.home() / ".config/herdr-app"))
     if not (home / "layouts").is_dir():
@@ -221,9 +226,11 @@ def main():
     if a.take_over:
         take_over(home, shipped, dry)
         return
-    if a.take_over_files or a.give_back_files:
-        files_panel(home, shipped, dry, a.give_back_files)
-        return
+    for view in PANELS:
+        take, give = getattr(a, f"take_over_{view}"), getattr(a, f"give_back_{view}")
+        if take or give:
+            panel(home, shipped, dry, view, give)
+            return
 
     if a.uninstall:
         for f in sorted((home / "layouts").glob("*.json")):
