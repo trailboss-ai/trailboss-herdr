@@ -28,7 +28,7 @@ python3 integrations/herdr/install.py --take-over --dry-run   # see what changes
 python3 integrations/herdr/install.py --take-over
 ```
 
-Their blocks in your layouts become Trailboss views, with the same ids and sizes, so panel buttons keep working: Sessions and Stats in the side panel, quotas in the status bar. Icons other mods borrowed from them (tabs-plus) now point at trailboss's. The four mods are removed through Herdr's package manager, which keeps them in `data/pkg/removed/`. The layouts and edited mods are backed up in `data/trailboss/backups/`. Insights opens from the dashboard's **Insights ↗** button.
+Their blocks in your layouts become Trailboss views, with the same ids and sizes, so panel buttons keep working: Sessions and Stats in the side panel, quotas in the status bar. Icons other mods borrowed from them (tabs-plus) now point at Trailboss's. The four mods are removed through Herdr's package manager, which keeps them in `data/pkg/removed/`. The layouts and edited mods are backed up in `data/trailboss/backups/`. Insights opens from the dashboard's **Insights ↗** button.
 
 ## Files and editor, agent-aware (opt-in)
 
@@ -36,7 +36,7 @@ Their blocks in your layouts become Trailboss views, with the same ids and sizes
 python3 integrations/herdr/install.py --take-over-files     # --give-back-files undoes it
 ```
 
-Your layout's Files panel becomes trailboss's: the focused terminal's repository (or folder), with each changed file badged with the agent that changed it. A solid badge means exactly, from the agent's edit tool. An outlined `agent?` badge means probably, because the file changed while only that agent was working there. Folders with changes inside get a dot, and the footer says which session made the change and when. **Right-click** a file or folder (or empty space, for the top folder) for its menu: Open, New file, New folder, Rename / move, Copy path, Reveal in file manager, Move to trash (asks first). **Drag** a file or folder onto another folder (or a file, meaning its folder, or empty space, meaning the top) to move it there. The toolbar does the same as the menu. Nothing is ever deleted outright: "delete" moves to the trash (`gio`, else `trash-cli`). Nothing overwrites an existing file, and everything stays inside the folder shown.
+Your layout's Files panel becomes Trailboss's: the focused terminal's repository (or folder), with each changed file badged with the agent that changed it. A solid badge means exactly, from the agent's edit tool. An outlined `agent?` badge means probably, because the file changed while only that agent was working there. Folders with changes inside get a dot, and the footer says which session made the change and when. **Right-click** a file or folder (or empty space, for the top folder) for its menu: Open, New file, New folder, Rename / move, Copy path, Reveal in file manager, Move to trash (asks first). **Drag** a file or folder onto another folder (or a file, meaning its folder, or empty space, meaning the top) to move it there. The toolbar does the same as the menu. Nothing is ever deleted outright: "delete" moves to the trash (`gio`, else `trash-cli`). Nothing overwrites an existing file, and everything stays inside the folder shown.
 
 Files open in a **multi-tab editor** pane beside the terminal. It works alongside agents:
 
@@ -57,7 +57,7 @@ Files open in a **multi-tab editor** pane beside the terminal. It works alongsid
 - **Left:** the agent sessions that changed files in this repository.
 - **Right:** the chosen session's files. Each shows whether it was modified or created, whether it's back as it was, and who changed it since.
 - **Click a file** for its before → now diff.
-- **Undo file…** or **Undo session…** (each asks first) puts files back as they were before the session, from Claude Code's own backups. It skips files another session changed later, never touches agents' own folders, and keeps what it replaces in trailboss's undo folder.
+- **Undo file…** or **Undo session…** (each asks first) puts files back as they were before the session, from Claude Code's own backups. It skips files another session changed later, never touches agents' own folders, and keeps what it replaces in Trailboss's undo folder.
 
 Local folders only.
 
