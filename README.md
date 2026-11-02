@@ -42,7 +42,10 @@ Files open in a **multi-tab editor** pane beside the terminal. It works alongsid
 
 - **Saving never overwrites an agent's edit unseen.** A save only lands if the file is still what you opened. If it changed, you see which agent probably changed it, and can **Compare** (a diff in its own tab), **Reload**, or **Overwrite with mine**.
 - **Live:** a file you haven't touched reloads by itself when an agent changes it, and says who.
-- **Keys:** Ctrl+S saves, Ctrl+W closes (asking first if unsaved), Ctrl+Tab switches. Files over 1 MB and binary files open with a notice instead.
+- **Highlighting** follows the file type (Markdown, C/C++, Rust, JS/TS, Python, YAML, and more; Dockerfile and Makefile by name).
+- **Word wrap** is on for Markdown and text, off for code; toggle it with the Wrap button or Alt+Z.
+- **Find and replace** (Ctrl+F, Ctrl+H): match case, regex, a match count and a list of matching lines; Replace next, Replace all, and Undo replace. The editor can't select text, so matches are listed rather than highlighted in place.
+- **Keys:** Ctrl+S saves, Ctrl+W closes (asking first if unsaved), Ctrl+Tab switches, Esc closes the find bar. Files over 1 MB and binary files open with a notice instead.
 
 **Changes**, the same way (`--take-over-changes`, undone by `--give-back-changes`), shows the repository's uncommitted work in Staged and Changes sections. Each file has its +/− counts and the badge of the agent that changed it.
 - Click a file for its diff.
