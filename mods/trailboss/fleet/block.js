@@ -1,8 +1,9 @@
 import { div, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { exec, theme, openOverlay, notify, shared } from "herdr";
+import { exec, theme, openOverlay, notify, shared, setShared } from "herdr";
 import { MOD, ICON, findBin, tb, plural, money, ymd, short, MISSING } from "../lib.js";
 import { quotaRows } from "../usage/quota.js";
+import { toWarn, warning } from "../usage/pace.js";
 
 // The status-bar block: agents running, working / blocked, today's cost and the Claude
 // 5-hour window. It keeps `trailboss` tracking which session runs in which terminal (every
@@ -12,6 +13,7 @@ import { quotaRows } from "../usage/quota.js";
 const POLL_MS = 15000;
 const TODAY_EVERY = 4; // polls between cost refreshes (~1 min)
 const QUOTA_EVERY = 20; // polls between quota checks (~5 min): those go to the network
+const WARNED = "trailboss.quota.warned";
 
 // Workspaces where two or more agents are working at once: they can overwrite each other.
 export function crowded(live) {
@@ -75,6 +77,14 @@ export class Block {
     }
   }
 
+  // Once per plan window that's on pace to run out before it resets.
+  warnPace() {
+    const { warn, warned } = toWarn(this.quota, shared(WARNED), Date.now() / 1000);
+    if (!warn.length) return;
+    setShared(WARNED, warned);
+    for (const q of warn) notify({ ...warning(q), level: "warning", icon: ICON, timeout: 15000 });
+  }
+
   async poll(cx) {
     if (!this.bin || this.busy) return;
     this.busy = true;
@@ -88,7 +98,10 @@ export class Block {
         this.today = u[0]?.cost_usd ?? 0;
       }
       // Shared with the quota strip: one refresh for both, at most every 5 minutes.
-      if (this.polls % QUOTA_EVERY === 0) this.quota = await quotaRows(5 * 60000).catch(() => this.quota);
+      if (this.polls % QUOTA_EVERY === 0) {
+        this.quota = await quotaRows(5 * 60000).catch(() => this.quota);
+        this.warnPace();
+      }
       this.polls++;
       this.error = null;
     } catch (e) {

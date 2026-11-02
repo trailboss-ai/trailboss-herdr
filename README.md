@@ -65,7 +65,7 @@ Local folders only.
 
 **The block** shows agents running, how many are working or waiting for you, today's cost at API prices, and the Claude 5-hour window with its pace (red when it's on track to run out). A **Resume N** button appears when a terminal has lost its agent. Click the block for the dashboard.
 
-In the background it runs `trailboss events` every 15 s, and notifies when an agent outside Herdr's own terminals (VS Code, a plain terminal) needs you or finishes a turn of 30 s or more. Herdr notifies about its own terminals itself. It also warns, wherever the agents run, when two are working in the same folder (and shows **⚠ N in one folder** in the block). Each look also records which session runs in which terminal. When Herdr starts it runs `trailboss resume --auto`, which brings back what a reboot lost (after a Herdr restart alone, use the button). A notification says what came back and what didn't, and why.
+In the background it runs `trailboss events` every 15 s, and notifies when an agent outside Herdr's own terminals (VS Code, a plain terminal) needs you or finishes a turn of 30 s or more. Herdr notifies about its own terminals itself. It also warns, wherever the agents run, when two are working in the same folder (and shows **⚠ N in one folder** in the block), and once per plan window when usage is on pace to run out before it resets ("Claude 5h limit in ~40m at this pace"). Each look also records which session runs in which terminal. When Herdr starts it runs `trailboss resume --auto`, which brings back what a reboot lost (after a Herdr restart alone, use the button). A notification says what came back and what didn't, and why.
 
 **The dashboard** (Alt+Shift+T, or click the block):
 
