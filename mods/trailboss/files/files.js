@@ -41,12 +41,14 @@ async function list(dir) {
 const sh = (script, ...args) => exec("sh", ["-c", script, "sh", ...args]);
 
 // Opens a file in the editor pane of this tab, starting one beside the focused pane if
-// there isn't one yet. The editor picks the request up from shared state.
+// there isn't one yet. The editor picks the request up from shared state, which every
+// editor pane in every space sees, so the request names its tab and only that tab's
+// editor takes it.
 export function openInEditor(path) {
-  setShared(OPEN_KEY, { path, at: Date.now() });
   const tab = focused()?.tab;
+  setShared(OPEN_KEY, { path, at: Date.now(), tab });
   if (!panes().some((p) => p.mod === "trailboss" && p.tab === tab)) {
-    run("pane.split", { direction: "right", mod: "trailboss", props: { view: "editor" } });
+    run("pane.split", { direction: "right", mod: "trailboss", props: { view: "editor", tab } });
   }
 }
 

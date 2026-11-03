@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, Input } from "gpui-base";
-import { exec, theme, settings, readTextFile, writeTextFile, shared, appHome, notify } from "herdr";
+import { exec, theme, settings, readTextFile, writeTextFile, shared, appHome, notify, focused } from "herdr";
 import { tb, short } from "../lib.js";
 import { OPEN_KEY } from "./files.js";
 import { findAll, replaceNext, replaceAll } from "./find.js";
@@ -49,6 +49,16 @@ async function whoChanged(path) {
   }
 }
 
+// Whether an open request is for this editor. A mod pane isn't told its own pane or tab,
+// so Files records the tab in the editor's props when it makes the pane (Herdr keeps
+// props with the pane). An editor made before that knows no tab: it takes requests made
+// while its own space is shown, which is right as long as one space shows at a time.
+// ponytail: a pane moved to another tab keeps its old tab; reopen the editor there.
+function forThisTab(req, tab) {
+  if (tab) return req.tab ? req.tab === tab : true;
+  return !req.tab || req.tab === focused()?.tab;
+}
+
 export class EditorView {
   init(p, cx) {
     this.tabs = [];
@@ -57,12 +67,13 @@ export class EditorView {
     this.seen = Date.now() - 10000; // take a request made just before this pane started
     this.closing = null;
     if (p.file) cx.spawn((cx) => this.open(cx, p.file));
-    // Requests from the Files panel (or anyone) come through shared state.
+    // Requests from the Files panel (or anyone) come through shared state, which every
+    // editor pane in every space sees: take only those meant for this pane's tab.
     cx.timer.every(300, (cx) => {
       const req = shared(OPEN_KEY);
       if (req?.at > this.seen) {
         this.seen = req.at;
-        cx.spawn((cx) => this.open(cx, req.path));
+        if (forThisTab(req, p.tab)) cx.spawn((cx) => this.open(cx, req.path));
       }
     });
     cx.timer.every(POLL_MS, (cx) => cx.spawn((cx) => this.poll(cx)));
