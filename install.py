@@ -10,6 +10,8 @@
                                                      Files panel (opt-in; --give-back-files undoes it)
   python3 install.py --take-over-changes the same for the Changes panel
                                                      (--give-back-changes undoes it)
+  python3 install.py --take-over-spaces  the spaces list with folders, in place of Herdr's
+                                                     (--give-back-spaces undoes it)
   python3 install.py --get-cli    download the latest CLI release to
                                                      ~/.local/bin (Linux x86_64 / aarch64)
   add --dry-run to any of them to see what would change
@@ -92,7 +94,7 @@ def take_over_blocks(node):
 
 
 # Herdr's own panels (or clones of them) that trailboss's agent-aware views can replace.
-PANELS = {"files": ("files", "files-wrap"), "changes": ("changes", "changes-wrap")}
+PANELS = {"files": ("files", "files-wrap"), "changes": ("changes", "changes-wrap"), "spaces": ("spaces",)}
 
 
 def swap_panel(node, view, give_back):
@@ -191,6 +193,8 @@ def main():
     ap.add_argument("--give-back-files", action="store_true")
     ap.add_argument("--take-over-changes", action="store_true")
     ap.add_argument("--give-back-changes", action="store_true")
+    ap.add_argument("--take-over-spaces", action="store_true")
+    ap.add_argument("--give-back-spaces", action="store_true")
     a = ap.parse_args()
     if a.get_cli:
         return get_cli(dry=a.dry_run)

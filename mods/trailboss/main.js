@@ -10,6 +10,7 @@ import { Files, FilesMenu } from "./files/files.js";
 import { EditorView } from "./files/editor.js";
 import { Changes } from "./files/changes.js";
 import { Review } from "./files/review.js";
+import { FolderSpaces, FolderMenu, FolderEdit } from "./spaces/folders.js";
 
 // Trailboss in Herdr: a thin frontend over the `trailboss` CLI's --json output. One mod,
 // several views, picked by the `view` prop a layout block or overlay passes:
@@ -25,7 +26,8 @@ import { Review } from "./files/review.js";
 //   editor          the multi-tab editor pane files open in
 //   changes         agent-aware git changes for the side panel (replaces Changes)
 //   review          review and undo one agent session's changes (a window, from Changes)
-//   quota-detail, quota-picker, session-agents, files-menu: their popups
+//   spaces          Herdr's spaces list with folders (replaces spaces)
+//   quota-detail, quota-picker, session-agents, files-menu, folder-menu, folder-edit: their popups
 
 const VIEWS = {
   quota: QuotaStrip,
@@ -40,6 +42,9 @@ const VIEWS = {
   editor: EditorView,
   changes: Changes,
   review: Review,
+  spaces: FolderSpaces,
+  "folder-menu": FolderMenu,
+  "folder-edit": FolderEdit,
 };
 
 export default class Trailboss extends View {

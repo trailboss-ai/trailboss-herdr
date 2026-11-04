@@ -66,6 +66,22 @@ Files open in a **multi-tab editor** pane beside the terminal. It works alongsid
 
 Local folders only.
 
+## Spaces with folders (opt-in)
+
+```sh
+python3 install.py --take-over-spaces    # --give-back-spaces undoes it
+```
+
+Your layout's spaces list becomes Trailboss's: Herdr's own list (worktrees under their repo, branch and ahead/behind, a group per machine, colors, the right-click menu), with folders up to four levels deep.
+
+- **New folder** at the top; right-click a folder for New space here, New folder inside, Edit… (name, color, start folder, rules), Show only this folder, Fold, Move the current space here, and Remove folder (its spaces stay).
+- **Drag** a space onto a folder to put it there, onto a space to put it beside that one, or onto **Drop here for the top level**. Drag a folder onto another to nest it.
+- **Rules** file spaces by themselves: a folder name anywhere in the path (`billing`), a path (`~/code/client-*`, `*` is one folder name), or a machine (`machine:vm-*`). The most specific rule wins; a space you put somewhere by hand stays there.
+- A folded folder still shows ● when something in it needs you, and how many agents are working.
+- Herdr's next / previous space keys follow the list as it shows.
+
+The folders live in `trailboss folders` (`~/.local/share/trailboss/folders.json`), so other frontends see the same ones.
+
 ## What it does
 
 **The block** shows agents running, how many are working or waiting for you, today's cost at API prices, and the Claude 5-hour window with its pace (red when it's on track to run out). A **Resume N** button appears when a terminal has lost its agent. Click the block for the dashboard.

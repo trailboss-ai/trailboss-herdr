@@ -29,3 +29,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Herdr: the spaces list
+
+`mods/trailboss/spaces/base.js` is Herdr app's own spaces mod (`defaults/mods/spaces/main.js`
+in [herdrdev/herdr-app](https://github.com/herdrdev/herdr-app), as shipped in herdr-app 0.1.13),
+copied unchanged. It's licensed under the Apache License 2.0, whose text is in
+`mods/trailboss/spaces/LICENSE-APACHE`. `mods/trailboss/spaces/folders.js` extends it, and
+the parts of it that follow `base.js` (ordering spaces, a space's row) are derived from that
+file under the same license.
