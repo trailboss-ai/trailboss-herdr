@@ -95,4 +95,4 @@ Report problems in [trailboss-ai/trailboss](https://github.com/trailboss-ai/trai
 
 ## License
 
-MIT ([LICENSE](LICENSE)).
+MIT ([LICENSE](LICENSE)). Parts come from other MIT-licensed mods: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

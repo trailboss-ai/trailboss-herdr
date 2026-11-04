@@ -74,7 +74,7 @@ def get_cli(minimum=None, dry=False):
     knows = subprocess.run([str(tmp), "--json", "version"], capture_output=True, text=True).returncode == 0
     if not knows or (minimum and version_tuple(got) < version_tuple(minimum)):
         tmp.unlink()
-        need = f"{minimum} or newer" if minimum else "a newer one"
+        need = f"{minimum} or newer" if knows and minimum else "a newer one (with `trailboss version`)"
         sys.exit(f"The latest release is {got}; the mod needs {need}. Nothing was installed.")
     tmp.replace(DEST)
     on_path = str(DEST.parent) in os.environ.get("PATH", "").split(os.pathsep)
