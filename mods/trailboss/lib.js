@@ -1,5 +1,6 @@
 // Shared by every Trailboss view: finding and running the CLI, and formatting.
-import { exec, home } from "herdr";
+import { exec, home, appHome, readTextFile } from "herdr";
+import { NEEDS, cliProblem, problemText, hasBlock } from "./cli.js";
 
 export const MOD = "trailboss";
 // The Trailboss mark (docs/brand/mark.svg), as a path in Herdr's home folder.
@@ -17,7 +18,48 @@ export async function findBin() {
   return (found = null);
 }
 
-export const MISSING = "The trailboss CLI isn't installed (install.py --get-cli, or cargo install --path <Trailboss repo>)";
+export const MISSING = "The trailboss CLI isn't installed: open the Trailboss dashboard and click Install";
+
+// Whether the CLI found works with this mod: { bin, version, problem, text }. `problem` is
+// null when it does; otherwise the views show `text` with an Install / Update button.
+export async function cliStatus() {
+  const bin = await findBin();
+  let v = null;
+  if (bin) {
+    try {
+      const r = await exec(bin, ["--json", "version"]);
+      if (r.code === 0) v = JSON.parse(r.stdout);
+    } catch {}
+  }
+  const problem = cliProblem(bin, v);
+  return { bin, version: v?.version ?? null, problem, text: problemText(problem, v) };
+}
+
+// Whether the current layout has the status-bar block; null when that can't be read.
+export async function blockInLayout() {
+  try {
+    const sh = JSON.parse((await readTextFile(`${appHome()}/shared.json`)) ?? "{}");
+    const text = await readTextFile(`${appHome()}/layouts/${sh.layout || "main"}.json`);
+    return text ? hasBlock(JSON.parse(text)) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Runs one of setup_mod.py's steps ("get-cli", "add-block"), which ships in this folder so it
+// works however the mod was installed. Only ever on a click. { ok, message }.
+export async function setupStep(step) {
+  const args = [`${appHome()}/mods/${MOD}/setup_mod.py`, step, ...(step === "get-cli" ? ["--min", NEEDS.version] : [])];
+  let r;
+  try {
+    r = await exec("python3", args);
+  } catch (e) {
+    return { ok: false, message: `Couldn't run python3: ${e?.message ?? e}` };
+  }
+  if (step === "get-cli") found = undefined; // look for the binary again
+  const out = ((r.code === 0 ? r.stdout : r.stderr || r.stdout) || "").trim().split("\n").pop();
+  return { ok: r.code === 0, message: out || (r.code === 0 ? "Done" : `${step} failed`) };
+}
 
 // Runs `trailboss --json <args>` and parses its output.
 export async function tb(args) {

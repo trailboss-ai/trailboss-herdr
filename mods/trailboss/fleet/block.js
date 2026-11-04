@@ -1,7 +1,7 @@
 import { div, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, theme, openOverlay, notify, shared, setShared } from "herdr";
-import { MOD, ICON, findBin, tb, plural, money, ymd, short, MISSING } from "../lib.js";
+import { MOD, ICON, cliStatus, setupStep, tb, plural, money, ymd, short } from "../lib.js";
 import { quotaRows } from "../usage/quota.js";
 import { toWarn, warning } from "../usage/pace.js";
 
@@ -33,18 +33,33 @@ export class Block {
     this.quota = [];
     this.polls = 0;
     this.busy = false;
-    cx.spawn(async (cx) => {
-      this.bin = await findBin();
-      if (!this.bin) {
-        this.error = MISSING;
-        cx.notify();
-        return;
-      }
-      // Track first, so a resume knows the terminals as they are now.
-      await this.poll(cx);
-      await this.resume(cx, true);
-    });
+    this.cli = null; // cliStatus() while the CLI is missing or too old
+    this.setup = null; // "Installing…", or why installing failed
+    this.loaded = false; // the first poll (which builds the index on a first run) is done
+    cx.spawn((cx) => this.start(cx));
     cx.timer.every(POLL_MS, (cx) => cx.spawn((cx) => this.poll(cx)));
+  }
+
+  async start(cx) {
+    const s = await cliStatus();
+    this.cli = s.problem ? s : null;
+    this.bin = s.problem ? null : s.bin;
+    cx.notify();
+    if (!this.bin) return;
+    // Track first, so a resume knows the terminals as they are now.
+    await this.poll(cx);
+    await this.resume(cx, true);
+  }
+
+  // Install or update the CLI: only ever on a click.
+  async install(cx) {
+    this.setup = "Installing…";
+    cx.notify();
+    const r = await setupStep("get-cli");
+    this.setup = r.ok ? null : r.message;
+    notify({ title: r.ok ? r.message : "Couldn't install Trailboss", body: r.ok ? "" : r.message, level: r.ok ? "success" : "error", icon: ICON });
+    if (r.ok) await this.start(cx);
+    cx.notify();
   }
 
   // Herdr already notifies about agents in its own terminals; Trailboss covers the rest
@@ -114,6 +129,7 @@ export class Block {
         this.warnPace();
       }
       this.polls++;
+      this.loaded = true;
       this.error = null;
     } catch (e) {
       this.error = String(e?.message ?? e);
@@ -197,8 +213,10 @@ export class Block {
           .hover((s) => s.text_color(t.foreground))
           .on_click(() => this.openDashboard())
           .child(image(ICON).w(14).h(14))
-          .when(Boolean(this.error), (el) => el.child(div().text_color(t.blocked).child(short(`Trailboss: ${this.error}`, 70))))
-          .when(!this.error, (el) =>
+          .when(Boolean(this.cli), (el) => el.child(div().text_color(t.blocked).child(short(this.setup ?? this.cli.text, 70))))
+          .when(!this.cli && Boolean(this.error), (el) => el.child(div().text_color(t.blocked).child(short(`Trailboss: ${this.error}`, 70))))
+          .when(!this.cli && !this.error && !this.loaded, (el) => el.child("Indexing…"))
+          .when(!this.cli && !this.error && this.loaded, (el) =>
             el
               .child(plural(live.length, "agent"))
               .when(working > 0, (el) => el.child(div().text_color(t.working).child(`${working} working`)))
@@ -216,6 +234,20 @@ export class Block {
                 ),
               ),
           ),
+      )
+      .when(Boolean(this.cli) && this.cli.problem !== "newer-api" && this.setup !== "Installing…", (el) =>
+        el.child(
+          div()
+            .id("install")
+            .cursor_pointer()
+            .px(8)
+            .rounded(4)
+            .bg(t.accent)
+            .text_color(t.accent_foreground)
+            .hover((s) => s.opacity(0.85))
+            .on_click((_e, cx) => cx.spawn((cx) => this.install(cx)))
+            .child(this.cli.problem === "missing" ? "Install" : "Update"),
+        ),
       )
       .when(lost > 0, (el) =>
         el.child(

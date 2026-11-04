@@ -25,12 +25,7 @@ data/trailboss/backups/.
 Adapted from herdr-agent-resume-plus's installer (same author, MIT).
 """
 import argparse
-import hashlib
-import io
 import json
-import platform
-import tarfile
-import urllib.request
 import os
 import shutil
 import subprocess
@@ -39,7 +34,10 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-MOD = "trailboss"
+# Downloading the CLI and adding the block live in the mod, which runs them itself when it was
+# installed without this script (pkg installs only the mod's folder).
+sys.path.insert(0, str(HERE / "mods" / "trailboss"))
+from setup_mod import MOD, STATUS, add_to_layout, get_cli  # noqa: E402
 # Both would type resume commands into the same terminals after a reboot.
 REPLACES = "agent-resume-plus"
 # Mods Trailboss replaces with its own views (docs/parity.md), and the view each block becomes.
@@ -47,38 +45,7 @@ TAKES_OVER = {"session-history": "sessions", "stats": "stats", "usage-bar": "quo
 # Icons other mods (tabs-plus) borrow from the mods being removed.
 ICONS = {"mods/stats/stats.svg": "mods/trailboss/icons/stats.svg",
          "mods/session-history/icon.svg": "mods/trailboss/icons/sessions.svg"}
-STATUS = "workspace-status"
 GENERATED = ("gpui-kit.d.ts", "herdr.d.ts", "jsconfig.json", "__pycache__")
-RELEASES = "https://github.com/trailboss-ai/trailboss/releases/latest/download"
-BLOCK = {"id": MOD, "type": "block", "content": {"mod": MOD}, "size": {"px": 320}}
-
-
-def get_cli(dry):
-    """Download the latest release for this machine, check it against SHA256SUMS, and put the
-    binary in ~/.local/bin."""
-    arch = {"x86_64": "x86_64", "amd64": "x86_64", "aarch64": "aarch64", "arm64": "aarch64"}.get(platform.machine().lower())
-    if sys.platform != "linux" or not arch:
-        sys.exit(f"No release build for {sys.platform} {platform.machine()}. Build it: cargo install --path .")
-    name = f"trailboss-{arch}-unknown-linux-musl"
-    dest = Path.home() / ".local/bin/trailboss"
-    print(f"{dry}download {RELEASES}/{name}.tar.gz to {dest}")
-    if dry:
-        return
-    fetch = lambda f: urllib.request.urlopen(f"{RELEASES}/{f}", timeout=60).read()
-    data = fetch(f"{name}.tar.gz")
-    sums = dict(line.split()[::-1] for line in fetch("SHA256SUMS").decode().splitlines() if line.strip())
-    if sums.get(f"{name}.tar.gz") != hashlib.sha256(data).hexdigest():
-        sys.exit("The download doesn't match its published checksum; nothing was installed.")
-    with tarfile.open(fileobj=io.BytesIO(data)) as tar:
-        binary = tar.extractfile(f"{name}/trailboss")
-        if binary is None:
-            sys.exit("The release archive has no trailboss binary; nothing was installed.")
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dest.with_suffix(".new")
-        tmp.write_bytes(binary.read())
-    tmp.chmod(0o755)
-    tmp.replace(dest)
-    print(subprocess.run([str(dest), "--version"], capture_output=True, text=True).stdout.strip(), "installed")
 
 
 def herdr(*args):
@@ -86,32 +53,6 @@ def herdr(*args):
     if r.returncode:
         sys.exit(f"herdr-app {' '.join(args)} failed:\n{r.stdout}{r.stderr}")
     return r.stdout
-
-
-def has_mod(node, name):
-    if isinstance(node, dict):
-        if node.get("type") == "block" and node.get("content", {}).get("mod") == name:
-            return True
-        return any(has_mod(v, name) for v in node.values())
-    return isinstance(node, list) and any(has_mod(v, name) for v in node)
-
-
-def add_block(node):
-    """Put BLOCK next to the status bar: into its row if it already has one, else wrap the
-    status block in a row. True when added."""
-    if isinstance(node, dict):
-        kids = node.get("children")
-        if isinstance(kids, list):
-            for i, c in enumerate(kids):
-                if isinstance(c, dict) and c.get("type") == "block" and c.get("content", {}).get("mod") == STATUS:
-                    if node.get("type") == "row":
-                        kids.append(dict(BLOCK))
-                    else:
-                        kids[i] = {"id": c.get("id", "status"), "type": "row", "size": c.get("size", {"px": 28}),
-                                   "children": [{**c, "id": f"{c.get('id', 'status')}-original", "size": {"weight": 1}}, dict(BLOCK)]}
-                    return True
-        return any(add_block(v) for v in node.values())
-    return isinstance(node, list) and any(add_block(v) for v in node)
 
 
 def drop_block(node):
@@ -252,7 +193,7 @@ def main():
     ap.add_argument("--give-back-changes", action="store_true")
     a = ap.parse_args()
     if a.get_cli:
-        return get_cli("(dry run) " if a.dry_run else "")
+        return get_cli(dry=a.dry_run)
     home = Path(os.environ.get("HERDR_APP_HOME", Path.home() / ".config/herdr-app"))
     if not (home / "layouts").is_dir():
         sys.exit(f"No Herdr app home at {home}. Start Herdr app once, or set HERDR_APP_HOME.")
@@ -332,39 +273,7 @@ def main():
     if not a.dry_run:
         keys_path.write_text(json.dumps(keys, indent=2) + "\n")
 
-    try:
-        layout = json.loads((home / "shared.json").read_text()).get("layout") or "main"
-    except (OSError, ValueError):
-        layout = "main"
-    path = home / "layouts" / f"{layout}.json"
-    if not path.exists():
-        sys.exit(f"Can't find the current layout ({path}). Add a block with \"mod\": \"{MOD}\" to your layout by hand.")
-    tree = json.loads(path.read_text())
-    if has_mod(tree, MOD):
-        print(f"Layout '{layout}' already has the {MOD} block.")
-        return
-    if not add_block(json.loads(path.read_text())):
-        print(f"Layout '{layout}' has no {STATUS} block. Add a block with \"mod\": \"{MOD}\" (about 320px wide) by hand.")
-        return
-    if f"layout:{layout}" in shipped:
-        clone = f"{layout}-{MOD}"
-        if (home / "layouts" / f"{clone}.json").exists():
-            sys.exit(f"layouts/{clone}.json already exists. Switch to it, or delete it and run again.")
-        print(f"{dry}'{layout}' is Herdr's own: clone it as '{clone}' and switch to it")
-        if a.dry_run:
-            return
-        herdr("do", "layout.clone", json.dumps({"name": layout, "as": clone}))
-        path = home / "layouts" / f"{clone}.json"
-        tree = json.loads(path.read_text())
-    elif not a.dry_run:
-        backup = home / "data" / MOD / "backups" / f"{layout}.{time.strftime('%Y%m%d-%H%M%S')}.json"
-        backup.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, backup)
-        print(f"backed up {path.name} to {backup}")
-    add_block(tree)
-    print(f"{dry}{path.name}: {MOD} block added at the right of the status bar")
-    if not a.dry_run:
-        path.write_text(json.dumps(tree, indent=2) + "\n")
+    add_to_layout(a.dry_run)
 
 
 if __name__ == "__main__":

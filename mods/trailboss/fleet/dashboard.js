@@ -3,7 +3,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme, props, closeOverlay, notify, run, shared, setShared } from "herdr";
 import { liveTree } from "./tree.js";
 import { openInsights } from "../usage/insights.js";
-import { ICON, findBin, tb, plural, money, daysAgo, short, statusColor, MISSING } from "../lib.js";
+import { ICON, cliStatus, setupStep, blockInLayout, tb, plural, money, daysAgo, short, statusColor } from "../lib.js";
 
 // The dashboard (Alt+Shift+T, or click the status block): Live, Sessions, Usage, Quota and
 // Stats, each one Trailboss command, plus a button for the Insights window.
@@ -34,15 +34,66 @@ export class Dashboard {
         if (n === this.typed) await this.load(cx, "Sessions");
       });
     });
-    cx.spawn(async (cx) => {
-      this.bin = await findBin();
-      if (!this.bin) this.error = MISSING;
-      await this.load(cx, this.tab);
-    });
+    this.cli = null; // cliStatus() while the CLI is missing or too old
+    this.inLayout = true; // whether the status-bar block is in the current layout
+    this.setup = null; // a setup step's progress or failure
+    cx.spawn((cx) => this.start(cx));
     // The Live tab stays live while open.
     cx.timer.every(5000, (cx) => {
       if (this.tab === "Live") cx.spawn((cx) => this.load(cx, "Live"));
     });
+  }
+
+  async start(cx) {
+    const s = await cliStatus();
+    this.cli = s.problem ? s : null;
+    this.bin = s.problem ? null : s.bin;
+    this.inLayout = (await blockInLayout()) !== false;
+    cx.notify();
+    if (this.bin) await this.load(cx, this.tab);
+  }
+
+  // A setup step from setup_mod.py, only ever on a click: "get-cli" or "add-block".
+  async runSetup(cx, step) {
+    this.setup = step === "get-cli" ? "Installing…" : "Adding the block…";
+    cx.notify();
+    const r = await setupStep(step);
+    this.setup = r.ok ? null : r.message;
+    if (r.ok) notify({ title: r.message, level: "success", icon: ICON });
+    await this.start(cx);
+  }
+
+  // What's missing for Trailboss to work, with the button that fixes it.
+  setupBanner(t) {
+    const cli = this.cli;
+    const text = cli ? cli.text : !this.inLayout ? "Trailboss's status-bar block isn't in this layout: tracking and resume need it." : null;
+    if (!text) return [];
+    const label = cli ? (cli.problem === "missing" ? "Install" : cli.problem === "old" ? "Update" : null) : "Add to layout";
+    const step = cli ? "get-cli" : "add-block";
+    return [
+      h_flex()
+        .px(10)
+        .py(6)
+        .gap(10)
+        .items_center()
+        .text_size(12)
+        .child(div().flex_1().text_color(t.blocked).child(this.setup ?? text))
+        .when(Boolean(label) && !this.setup?.endsWith("…"), (el) =>
+          el.child(
+            div()
+              .id("setup")
+              .cursor_pointer()
+              .px(8)
+              .py(2)
+              .rounded(4)
+              .bg(t.accent)
+              .text_color(t.accent_foreground)
+              .hover((s) => s.opacity(0.85))
+              .on_click((_e, cx) => cx.spawn((cx) => this.runSetup(cx, step)))
+              .child(label),
+          ),
+        ),
+    ];
   }
 
   async load(cx, tab) {
@@ -155,7 +206,8 @@ export class Dashboard {
   body(t) {
     const tab = this.tab;
     const err = this.errors[tab] ?? this.error;
-    const out = [];
+    const out = [...this.setupBanner(t)];
+    if (this.cli) return out;
     if (err) out.push(this.note(t, err, t.blocked));
     if (this.loading[tab] && !this.rows[tab]) out.push(this.note(t, tab === "Stats" ? "Asking GitHub…" : "Loading…"));
 

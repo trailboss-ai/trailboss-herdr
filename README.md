@@ -16,6 +16,10 @@ The installer:
 
 `--update` copies a newer mod over an install; `--uninstall` takes the block and the keys out and removes the mod.
 
+**Installed another way (pkg, Herdr's catalog), or no CLI yet:** open the dashboard (`mod.open:trailboss`). It checks the CLI with `trailboss --json version` and, when it's missing or older than the mod needs, shows **Install** / **Update**: that downloads the release for your machine (Linux x86_64 or aarch64) to `~/.local/bin`, after checking its SHA-256. When the status-bar block isn't in the current layout, it offers **Add to layout**, which does what the installer does above. Both run `mods/trailboss/setup_mod.py`, which ships in the mod's folder (`install.py --get-cli` runs the same code), and only when you click.
+
+**Offline:** download the release archive for your machine on another computer and put its `trailboss` binary in `~/.local/bin`.
+
 **Replacing agent-resume-plus:** the installer refuses while it's installed, because both would resume the same terminals after a reboot. Uninstall it first (`python3 <herdr-agent-resume-plus>/scripts/install.py --uninstall`). Trailboss starts tracking from scratch; agent-resume-plus's tracked sessions aren't carried over.
 
 ## Replacing insights, session-history, stats and usage-bar
@@ -81,4 +85,5 @@ In the background it runs `trailboss events` every 15 s, and notifies when an ag
 
 - The block has to stay in your layout: it's what keeps tracking sessions and resumes them after a reboot.
 - `trailboss` is looked for on PATH, then in `~/.cargo/bin` and `~/.local/bin` (apps started from a desktop launcher often miss those on PATH).
+- The mod states the oldest CLI it works with (`NEEDS` in `mods/trailboss/cli.js`); the status block says when the one it found is older, with an **Install** / **Update** button. Nothing is downloaded unless you click.
 - Quota checks call Anthropic's and OpenAI's usage endpoints every 5 minutes; Stats asks GitHub only when you open that tab.

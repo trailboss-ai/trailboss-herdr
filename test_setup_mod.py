@@ -1,0 +1,46 @@
+"""Checks for mods/trailboss/setup_mod.py: python3 integrations/herdr/test_setup_mod.py"""
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "mods" / "trailboss"))
+from setup_mod import add_block, asset, has_mod, version_tuple  # noqa: E402
+
+# Which release a machine gets.
+assert asset("linux", "x86_64") == "trailboss-x86_64-unknown-linux-musl"
+assert asset("linux", "AMD64") == "trailboss-x86_64-unknown-linux-musl"
+assert asset("linux", "arm64") == "trailboss-aarch64-unknown-linux-musl"
+assert asset("darwin", "arm64") is None
+assert asset("win32", "AMD64") is None
+assert asset("linux", "riscv64") is None
+
+# Versions compare as numbers, not strings.
+assert version_tuple("0.10.0") > version_tuple("0.9.9")
+assert version_tuple("0.4.0-rc1") == version_tuple("0.4.0")
+
+# The block goes beside the status block: wrapped in a row, or appended to its row.
+status = {"id": "status", "type": "block", "content": {"mod": "workspace-status"}, "size": {"px": 28}}
+col = {"type": "column", "children": [{"type": "block", "content": {"mod": "spaces"}}, dict(status)]}
+assert add_block(col) and has_mod(col, "trailboss")
+row = col["children"][1]
+assert row["type"] == "row" and [c["content"]["mod"] for c in row["children"]] == ["workspace-status", "trailboss"]
+already = {"type": "row", "children": [dict(status)]}
+assert add_block(already) and len(already["children"]) == 2
+assert not add_block({"type": "column", "children": []})
+
+# add-block on Herdr's own layout clones it (dry run: nothing written).
+with tempfile.TemporaryDirectory() as home:
+    h = Path(home)
+    (h / "layouts").mkdir()
+    (h / "layouts" / "main.json").write_text(json.dumps(col | {"children": [dict(status)]}))
+    (h / "installed.json").write_text(json.dumps(["layout:main"]))
+    r = subprocess.run([sys.executable, str(HERE / "mods" / "trailboss" / "setup_mod.py"), "add-block", "--dry-run"],
+                       capture_output=True, text=True, env={**os.environ, "HERDR_APP_HOME": home})
+    assert r.returncode == 0 and "clone it as 'main-trailboss'" in r.stdout, r
+    assert not has_mod(json.loads((h / "layouts" / "main.json").read_text()), "trailboss")
+
+print("setup_mod: ok")
