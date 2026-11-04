@@ -2,8 +2,8 @@
 
 ## insights: usage metrics
 
-The Insights window (`mods/trailboss/usage/insights.js`) and the provider logos in
-`mods/trailboss/logos/` come from the insights mod in
+The Insights window (`mods/trailboss/usage/insights.js`) is ported in shape from, and the
+provider logos in `mods/trailboss/logos/` come from, the insights mod in
 [GaganSD/coding-agent-toolkit](https://github.com/GaganSD/coding-agent-toolkit) (`herdr-insights/`).
 
 ```
