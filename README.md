@@ -5,8 +5,9 @@ A [Herdr](https://herdr.dev) mod: Trailboss in the status bar and a dashboard on
 ## Install
 
 ```sh
-cargo install --path .                    # from the Trailboss repo: the CLI the mod runs
-python3 integrations/herdr/install.py     # --dry-run first to see what it changes
+git clone https://github.com/trailboss-ai/trailboss-herdr && cd trailboss-herdr
+python3 install.py --get-cli              # the Trailboss CLI the mod runs, into ~/.local/bin
+python3 install.py                        # --dry-run first to see what it changes
 ```
 
 The installer:
@@ -16,7 +17,7 @@ The installer:
 
 `--update` copies a newer mod over an install; `--uninstall` takes the block and the keys out and removes the mod.
 
-**Installed another way (pkg, Herdr's catalog), or no CLI yet:** open the dashboard (`mod.open:trailboss`). It checks the CLI with `trailboss --json version` and, when it's missing or older than the mod needs, shows **Install** / **Update**: that downloads the release for your machine (Linux x86_64 or aarch64) to `~/.local/bin`, after checking its SHA-256. When the status-bar block isn't in the current layout, it offers **Add to layout**, which does what the installer does above. Both run `mods/trailboss/setup_mod.py`, which ships in the mod's folder (`install.py --get-cli` runs the same code), and only when you click.
+**Installed through Herdr's package manager, or no CLI yet:** open the dashboard (`mod.open:trailboss`). It checks the CLI with `trailboss --json version` and, when it's missing or older than the mod needs, shows **Install** / **Update**: that downloads the release for your machine (Linux x86_64 or aarch64) to `~/.local/bin`, after checking its SHA-256. When the status-bar block isn't in the current layout, it offers **Add to layout**, which does what the installer does above. Both run `mods/trailboss/setup_mod.py`, which ships in the mod's folder (`install.py --get-cli` runs the same code), and only when you click.
 
 **Offline:** download the release archive for your machine on another computer and put its `trailboss` binary in `~/.local/bin`.
 
@@ -27,9 +28,9 @@ The installer:
 Trailboss does everything those four mods do ([parity checklist](../../docs/parity.md)). To swap them out:
 
 ```sh
-python3 integrations/herdr/install.py --update                # the current mod first
-python3 integrations/herdr/install.py --take-over --dry-run   # see what changes
-python3 integrations/herdr/install.py --take-over
+python3 install.py --update                # the current mod first
+python3 install.py --take-over --dry-run   # see what changes
+python3 install.py --take-over
 ```
 
 Their blocks in your layouts become Trailboss views, with the same ids and sizes, so panel buttons keep working: Sessions and Stats in the side panel, quotas in the status bar. Icons other mods borrowed from them (tabs-plus) now point at Trailboss's. The four mods are removed through Herdr's package manager, which keeps them in `data/pkg/removed/`. The layouts and edited mods are backed up in `data/trailboss/backups/`. Insights opens from the dashboard's **Insights ↗** button or **Alt+Shift+I** (which needs the status-bar block in the layout).
@@ -37,7 +38,7 @@ Their blocks in your layouts become Trailboss views, with the same ids and sizes
 ## Files and editor, agent-aware (opt-in)
 
 ```sh
-python3 integrations/herdr/install.py --take-over-files     # --give-back-files undoes it
+python3 install.py --take-over-files     # --give-back-files undoes it
 ```
 
 Your layout's Files panel becomes Trailboss's: the focused terminal's repository (or folder), with each changed file badged with the agent that changed it. A solid badge means exactly, from the agent's edit tool. An outlined `agent?` badge means probably, because the file changed while only that agent was working there. Folders with changes inside get a dot, and the footer says which session made the change and when. **Right-click** a file or folder (or empty space, for the top folder) for its menu: Open, New file, New folder, Rename / move, Copy name, Copy full path, Copy relative path, Reveal in file manager, Move to trash (asks first). **Drag** a file or folder onto another folder (or a file, meaning its folder, or empty space, meaning the top) to move it there. The toolbar does the same as the menu. Nothing is ever deleted outright: "delete" moves to the trash (`gio`, else `trash-cli`). Nothing overwrites an existing file, and everything stays inside the folder shown.
@@ -87,3 +88,11 @@ In the background it runs `trailboss events` every 15 s, and notifies when an ag
 - `trailboss` is looked for on PATH, then in `~/.cargo/bin` and `~/.local/bin` (apps started from a desktop launcher often miss those on PATH).
 - The mod states the oldest CLI it works with (`NEEDS` in `mods/trailboss/cli.js`); the status block says when the one it found is older, with an **Install** / **Update** button. Nothing is downloaded unless you click.
 - Quota checks call Anthropic's and OpenAI's usage endpoints every 5 minutes; Stats asks GitHub only when you open that tab.
+
+## Issues and contributing
+
+Report problems in [trailboss-ai/trailboss](https://github.com/trailboss-ai/trailboss/issues) (issues are off here, so everything is in one place). Pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). The mod only uses the CLI's `--json` output, as described in [trailboss-specification](https://github.com/trailboss-ai/trailboss-specification).
+
+## License
+
+MIT ([LICENSE](LICENSE)).

@@ -1,0 +1,5 @@
+__pycache__/
+# Written into mod folders by herdr-app check; Herdr regenerates them.
+mods/**/gpui-kit.d.ts
+mods/**/herdr.d.ts
+mods/**/jsconfig.json

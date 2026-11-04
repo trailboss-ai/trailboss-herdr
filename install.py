@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """Install the Trailboss mod into Herdr app.
 
-  python3 integrations/herdr/install.py              install
-  python3 integrations/herdr/install.py --update     copy the mod over an earlier install
-  python3 integrations/herdr/install.py --uninstall  take it out of your layouts and keys, remove the mod
-  python3 integrations/herdr/install.py --take-over  put Trailboss where insights, session-history,
+  python3 install.py              install
+  python3 install.py --update     copy the mod over an earlier install
+  python3 install.py --uninstall  take it out of your layouts and keys, remove the mod
+  python3 install.py --take-over  put Trailboss where insights, session-history,
                                                      stats and usage-bar were, then remove those mods
-  python3 integrations/herdr/install.py --take-over-files   show trailboss's agent-aware Files in the
+  python3 install.py --take-over-files   show trailboss's agent-aware Files in the
                                                      Files panel (opt-in; --give-back-files undoes it)
-  python3 integrations/herdr/install.py --take-over-changes the same for the Changes panel
+  python3 install.py --take-over-changes the same for the Changes panel
                                                      (--give-back-changes undoes it)
-  python3 integrations/herdr/install.py --get-cli    download the latest CLI release to
+  python3 install.py --get-cli    download the latest CLI release to
                                                      ~/.local/bin (Linux x86_64 / aarch64)
   add --dry-run to any of them to see what would change
 
-It needs the Trailboss CLI installed: --get-cli, a release archive, or cargo install --path . It copies mods/trailboss,
+It needs the Trailboss CLI installed: --get-cli or a release archive. It copies mods/trailboss,
 binds alt-shift-t to the dashboard and alt-shift-i to Insights (refusing a key already in use), and adds the mod's
 320px block at the right of the current layout's status bar: it has to be in the layout
 to keep tracking sessions and to resume them after a reboot. Herdr's own layouts (main,
