@@ -25,7 +25,7 @@ The installer:
 
 ## Replacing insights, session-history, stats and usage-bar
 
-Trailboss does everything those four mods do ([parity checklist](../../docs/parity.md)). To swap them out:
+Trailboss does everything those four mods do. To swap them out:
 
 ```sh
 python3 install.py --update                # the current mod first
