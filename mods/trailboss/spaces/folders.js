@@ -3,12 +3,12 @@
 // `trailboss folders` keeps the tree and decides where each space goes, so every frontend
 // agrees. Herdr's order follows the list, so its next / previous space keys go down it.
 //
-// Herdr's spaces mod is Apache-2.0 (LICENSE-APACHE here); `ordered`, `where` and `place`
-// below follow base.js. Everything else is Trailboss's.
+// Herdr's spaces mod is Apache-2.0 (LICENSE-APACHE here); `ordered`, `render`, `where`,
+// `place`, `narrow` and `keepColors` below follow base.js. Everything else is Trailboss's.
 
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { spaces, panes, machines, run, theme, shared, setShared, openOverlay, closeOverlay, notify, focused } from "herdr";
+import { spaces, panes, machines, run, theme, shared, setShared, openOverlay, closeOverlay, notify, focused, layout } from "herdr";
 import Spaces from "./base.js";
 import { tb, short, err } from "../lib.js";
 import { layoutTree, spaceOrder, canMoveInto, reorder } from "./tree.js";
@@ -292,51 +292,76 @@ export class FolderSpaces extends Spaces {
       .child(this.dnd?.kind === "folder" ? "Drop here to move it to the top" : "Drop here to take it out of its folder");
   }
 
-  // Herdr's header, plus New folder, and the focused folder's name with a way back.
+  // From base.js's render, with New folder beside New space, and the focused folder's name
+  // (with a way back) in place of "Spaces".
   render() {
     const t = theme();
+    const collapsed = narrow();
+    keepColors();
     const focus = shared(FOCUS) ?? null;
     const focused = focus && shared(STATE)?.folders?.find((f) => f.id === focus);
-    const base = super.render();
+    const button = (id, icon, tip, onClick) =>
+      div()
+        .id(id)
+        .size(26)
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(6)
+        .hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .tooltip(tip)
+        .on_click(onClick)
+        .child(svg(`mods/workspace-chrome/${icon}.svg`).size(14));
     return v_flex()
       .size_full()
       .min_h(0)
       .bg(t.chrome)
+      .text_size(13)
       .child(
         h_flex()
-          .h(26)
-          .flex_none()
-          .px(14)
-          .gap(8)
+          .h(31)
+          .pl(16)
+          .pr(10)
+          .gap(2)
           .items_center()
           .text_size(11.5)
           .text_color(t.dim)
-          .when(Boolean(focused), (el) =>
-            el
-              .child(
-                div()
-                  .id("focus-back")
-                  .cursor_pointer()
-                  .hover((s) => s.text_color(t.foreground))
-                  .on_click(() => setShared(FOCUS, null))
-                  .child("← All spaces"),
-              )
-              .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(focused.name)),
+          .when(!collapsed && !focused, (el) => el.child(div().flex_1().child("Spaces")))
+          .when(!collapsed && Boolean(focused), (el) =>
+            el.child(
+              h_flex()
+                .id("focus-back")
+                .flex_1()
+                .min_w(0)
+                .gap(6)
+                .cursor_pointer()
+                .hover((s) => s.text_color(t.foreground))
+                .tooltip("Show all spaces")
+                .on_click(() => setShared(FOCUS, null))
+                .child(div().flex_none().child("←"))
+                .child(div().min_w(0).truncate().text_color(t.foreground).child(focused.name)),
+            ),
           )
-          .when(!focused, (el) => el.child(div().flex_1()))
-          .child(
-            div()
-              .id("folder-add")
-              .cursor_pointer()
-              .px(4)
-              .rounded(4)
-              .hover((s) => s.bg(t.hover).text_color(t.foreground))
-              .on_click(() => openFolderMenu(null, "new"))
-              .child("New folder"),
-          ),
+          .when(collapsed, (el) => el.child(div().flex_1()))
+          .when(!collapsed, (el) => el.child(button("folder-add", "folder-plus", "New folder", () => openFolderMenu(null, "new"))))
+          .child(button("space-new", "plus", "New space", () => run("space.new"))),
       )
-      .when(Boolean(this.error), (el) => el.child(div().px(14).text_size(11).text_color(t.blocked).child(short(this.error, 120))))
-      .child(base.flex_1().min_h(0))
+      .when(Boolean(this.error), (el) => el.child(div().px(16).pb(4).text_size(11).text_color(t.blocked).child(short(this.error, 120))))
+      .child(
+        v_flex()
+          .flex_1()
+          .min_h(0)
+          .px(8)
+          .pb(14)
+          .overflow_y_scrollbar()
+          .mode("always")
+          .on_mouse_up("left", (_e, cx) => {
+            this.pressed = null;
+            cx.notify();
+          })
+          .children(this.grouped(t, collapsed)),
+      )
       // Released anywhere else: no drop. Later than the rows' own handlers, which drop.
       .on_mouse_up("left", (_e, cx) =>
         cx.spawn(async (cx) => {
@@ -346,6 +371,33 @@ export class FolderSpaces extends Spaces {
         }),
       );
   }
+}
+
+// From base.js: the sidebar's rail goes by its width.
+function find(node, id) {
+  if (node?.id === id) return node;
+  for (const child of node?.children ?? []) {
+    const found = find(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
+
+// From base.js: every space keeps a color, new ones get the least used.
+function keepColors() {
+  const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
+  const sp = spaces();
+  const ids = new Set(sp.map((p) => p.id));
+  const kept = Object.fromEntries(Object.entries(shared("space.colors") ?? {}).filter(([id]) => ids.has(id)));
+  let changed = Object.keys(kept).length !== Object.keys(shared("space.colors") ?? {}).length;
+  for (const p of sp) {
+    if (kept[p.id] || p.name === "~") continue;
+    const uses = (c) => Object.values(kept).filter((v) => v === c).length;
+    kept[p.id] = palette.reduce((best, c) => (uses(c) < uses(best) ? c : best));
+    changed = true;
+  }
+  if (changed) setShared("space.colors", kept);
 }
 
 // ---------------------------------------------------------------- the folder menu
