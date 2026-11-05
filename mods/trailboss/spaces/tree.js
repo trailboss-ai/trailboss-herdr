@@ -74,3 +74,16 @@ export function canMoveInto(state, id, into, max = 4) {
   const height = (fid) => 1 + Math.max(0, ...childrenOf(state, fid).map((f) => height(f.id)));
   return depth(into) + height(id) <= max;
 }
+
+// The `folders move` arguments that move `f` one place up (-1) or down (1) among the folders
+// beside it, or null at the end.
+export function reorder(state, f, step) {
+  const sibs = (state?.folders ?? []).filter((x) => (x.parent ?? null) === (f.parent ?? null));
+  const i = sibs.findIndex((x) => x.id === f.id);
+  const j = i + step;
+  if (i < 0 || j < 0 || j >= sibs.length) return null;
+  const where = f.parent ? ["--into", f.parent] : ["--top"];
+  // Moving down: before the one after the next, or last.
+  const before = step < 0 ? sibs[j].id : sibs[j + 1]?.id;
+  return ["move", f.id, ...where, ...(before ? ["--before", before] : [])];
+}

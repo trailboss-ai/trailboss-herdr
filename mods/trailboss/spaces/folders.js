@@ -11,7 +11,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, machines, run, theme, shared, setShared, openOverlay, closeOverlay, notify, focused } from "herdr";
 import Spaces from "./base.js";
 import { tb, short, err } from "../lib.js";
-import { layoutTree, spaceOrder, canMoveInto } from "./tree.js";
+import { layoutTree, spaceOrder, canMoveInto, reorder } from "./tree.js";
 
 export const STATE = "trailboss.folders"; // the last `trailboss --json folders`, for every view
 export const FOCUS = "trailboss.focus"; // a folder id shown alone, or null
@@ -42,8 +42,10 @@ export class FolderSpaces extends Spaces {
     this.placed = {}; // space id -> folder id (null: top level), from `folders place`
     this.placeKey = null;
     this.placing = false;
-    this.dragSpace = null; // a space being dragged (Herdr's row tracks its own drag too)
-    this.dragFolder = null;
+    // A drag: {kind: "space" | "folder", id, moved}. Herdr's row keeps its own (pressed,
+    // over) to reorder spaces; this one files them and moves folders.
+    this.dnd = null;
+    this.dndOver = null; // what the pointer is over while dragging: "folder:f1", "top", "space:…"
     this.error = null;
     cx.spawn(async (cx) => {
       try {
@@ -134,7 +136,7 @@ export class FolderSpaces extends Spaces {
     const focus = shared(FOCUS) ?? null;
     const { items, rest } = layoutTree(this.ordered(), state, this.placed, focus);
     const out = items.map((x) => (x.kind === "folder" ? this.folderRow(x, t) : this.filedRow(x, t)));
-    if (this.dragSpace || this.dragFolder) out.push(this.topDrop(t));
+    if (this.dnd?.moved) out.push(this.topDrop(t));
     if (focus) return out;
     this.only = new Set(rest.map((r) => r.w.id));
     try {
@@ -144,33 +146,51 @@ export class FolderSpaces extends Spaces {
     }
   }
 
-  // A space inside a folder: Herdr's row, indented; dropping a dragged space on it files the
-  // dragged one in the same folder (Herdr's own handler moves it next to this one).
-  filedRow(x, t) {
-    const id = x.row.w.id;
+  // Every space's row, in a folder or not: Herdr's, made draggable into folders. Dropped on
+  // another space, it goes in that space's folder (and Herdr puts it beside that space).
+  row(r, t) {
+    const inner = super.row(r, t);
+    if (!shared(STATE)?.folders?.length) return inner;
+    const id = r.w.id;
     return div()
-      .id(`filed-${id}`)
-      .pl(x.depth * INDENT)
-      .on_mouse_down("left", () => (this.dragSpace = id))
-      .on_mouse_up("left", (_e, cx) => this.dropOn(cx, x.folder))
-      .child(this.row(x.row, t));
+      .id(`dnd-${id}`)
+      .on_mouse_down("left", () => (this.dnd = { kind: "space", id, moved: false }))
+      .on_mouse_move((_e, cx) => this.dragOver(cx, `space:${id}`))
+      .on_mouse_up("left", (_e, cx) => this.drop(cx, this.placed[id] ?? null))
+      .child(inner);
   }
 
-  dropOn(cx, folder) {
-    const space = this.dragSpace;
-    const moving = this.dragFolder;
-    this.dragSpace = this.dragFolder = null;
-    if (space && (this.placed[space] ?? null) !== folder) {
+  filedRow(x, t) {
+    return div().id(`filed-${x.row.w.id}`).pl(x.depth * INDENT).child(this.row(x.row, t));
+  }
+
+  // The pointer moved over `key` while the button is down: once it leaves where the drag
+  // started, it's a drag (not a click), and the targets show.
+  dragOver(cx, key) {
+    const d = this.dnd;
+    if (!d) return;
+    const changed = this.dndOver !== key || (!d.moved && key !== `${d.kind}:${d.id}`);
+    if (key !== `${d.kind}:${d.id}`) d.moved = true;
+    this.dndOver = key;
+    if (changed) cx.notify();
+  }
+
+  // Released over a folder (`folder` its id), a space (that space's folder) or the top (null).
+  drop(cx, folder) {
+    const d = this.dnd;
+    this.dnd = this.dndOver = null;
+    if (!d?.moved) return cx.notify();
+    if (d.kind === "space" && (this.placed[d.id] ?? null) !== folder) {
       cx.spawn(async (cx) => {
-        await this.act(folder ? ["file", space, folder] : ["file", space, "--top"]);
+        await this.act(folder ? ["file", d.id, folder] : ["file", d.id, "--top"]);
         cx.notify();
       });
-    } else if (moving && moving !== folder) {
-      if (!canMoveInto(shared(STATE), moving, folder)) {
-        notify({ title: "Folders go at most 4 levels deep", level: "warning", timeout: 4000 });
+    } else if (d.kind === "folder" && d.id !== folder) {
+      if (!canMoveInto(shared(STATE), d.id, folder)) {
+        notify({ title: "Folders go at most 4 levels deep, and not inside themselves", level: "warning", timeout: 4000 });
       } else {
         cx.spawn(async (cx) => {
-          await this.act(folder ? ["move", moving, "--into", folder] : ["move", moving, "--top"]);
+          await this.act(folder ? ["move", d.id, "--into", folder] : ["move", d.id, "--top"]);
           cx.notify();
         });
       }
@@ -187,9 +207,17 @@ export class FolderSpaces extends Spaces {
     }
   }
 
+  // Can what's being dragged go into folder `id`?
+  accepts(id) {
+    const d = this.dnd;
+    if (!d?.moved) return false;
+    if (d.kind === "space") return (this.placed[d.id] ?? null) !== id;
+    return d.id !== id && canMoveInto(shared(STATE), d.id, id);
+  }
+
   folderRow({ folder: f, depth, count, working, needs }, t) {
     const fill = MARK[f.color] ?? t.dim;
-    const dropping = (this.dragSpace || (this.dragFolder && this.dragFolder !== f.id));
+    const target = this.dndOver === `folder:${f.id}` && this.accepts(f.id);
     return h_flex()
       .id(`folder-${f.id}`)
       .h(26)
@@ -201,17 +229,23 @@ export class FolderSpaces extends Spaces {
       .rounded(7)
       .text_size(12.5)
       .cursor_pointer()
-      .hover((s) => s.bg(dropping ? t.selected : t.hover))
-      .when(this.dragFolder === f.id, (el) => el.opacity(0.5))
-      .on_mouse_down("left", () => (this.dragFolder = f.id))
+      .border_1()
+      .border_color(target ? t.accent : t.chrome)
+      .when(target, (el) => el.bg(t.selected))
+      .when(!target, (el) => el.hover((s) => s.bg(t.hover)))
+      .when(this.dnd?.moved && this.dnd.kind === "folder" && this.dnd.id === f.id, (el) => el.opacity(0.5))
+      .on_mouse_down("left", () => (this.dnd = { kind: "folder", id: f.id, moved: false }))
+      .on_mouse_move((_e, cx) => this.dragOver(cx, `folder:${f.id}`))
       .on_mouse_up("left", (_e, cx) => {
-        if (this.dragFolder === f.id && !this.dragSpace) {
-          this.dragFolder = null;
+        const d = this.dnd;
+        if (d?.kind === "folder" && d.id === f.id && !d.moved) {
+          // A click: fold or unfold.
+          this.dnd = this.dndOver = null;
           cx.spawn(async (cx) => {
             await this.act(["edit", f.id, f.folded ? "--unfold" : "--fold"]);
             cx.notify();
           });
-        } else this.dropOn(cx, f.id);
+        } else this.drop(cx, f.id);
       })
       .on_mouse_down("right", () => openFolderMenu(f.id))
       .child(svg(`mods/workspace-chrome/chevron-${f.folded ? "right" : "down"}.svg`).size(11).flex_none().text_color(t.dim))
@@ -229,32 +263,33 @@ export class FolderSpaces extends Spaces {
           .text_color(t.dim)
           .hover((s) => s.bg(t.hover).text_color(t.foreground))
           .tooltip("New space here")
+          .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
           .on_click((_e, cx) => {
             cx.stop_propagation();
-            this.newSpaceIn(f);
+            newSpaceIn(f);
           })
           .child("+"),
       );
   }
 
-  newSpaceIn(f) {
-    newSpaceIn(f);
-  }
-
   topDrop(t) {
+    const over = this.dndOver === "top";
     return div()
       .id("folder-top")
       .h(26)
       .flex_none()
       .px(8)
       .rounded(7)
+      .flex()
+      .items_center()
       .text_size(11.5)
-      .text_color(t.dim)
+      .text_color(over ? t.foreground : t.dim)
       .border_1()
-      .border_color(t.border)
-      .hover((s) => s.bg(t.selected))
-      .on_mouse_up("left", (_e, cx) => this.dropOn(cx, null))
-      .child("Drop here for the top level");
+      .border_color(over ? t.accent : t.border)
+      .when(over, (el) => el.bg(t.selected))
+      .on_mouse_move((_e, cx) => this.dragOver(cx, "top"))
+      .on_mouse_up("left", (_e, cx) => this.drop(cx, null))
+      .child(this.dnd?.kind === "folder" ? "Drop here to move it to the top" : "Drop here to take it out of its folder");
   }
 
   // Herdr's header, plus New folder, and the focused folder's name with a way back.
@@ -302,16 +337,20 @@ export class FolderSpaces extends Spaces {
       )
       .when(Boolean(this.error), (el) => el.child(div().px(14).text_size(11).text_color(t.blocked).child(short(this.error, 120))))
       .child(base.flex_1().min_h(0))
-      .on_mouse_up("left", (_e, cx) => {
-        this.dragSpace = this.dragFolder = null;
-        cx.notify();
-      });
+      // Released anywhere else: no drop. Later than the rows' own handlers, which drop.
+      .on_mouse_up("left", (_e, cx) =>
+        cx.spawn(async (cx) => {
+          if (!this.dnd) return;
+          this.dnd = this.dndOver = null;
+          cx.notify();
+        }),
+      );
   }
 }
 
 // ---------------------------------------------------------------- the folder menu
 
-const ITEMS = 8;
+const ITEMS = 10;
 function openFolderMenu(id, mode = null) {
   openOverlay({
     mod: "trailboss",
@@ -403,6 +442,10 @@ export class FolderMenu {
         this.item(t, "focus", focused ? "Show all spaces" : "Show only this folder", () => (setShared(FOCUS, focused ? null : f.id), this.close())),
         this.item(t, "fold", f.folded ? "Unfold" : "Fold", (_e, cx) => cx.spawn((cx) => this.run(cx, ["edit", f.id, f.folded ? "--unfold" : "--fold"]))),
       );
+      const up = reorder(state, f, -1);
+      const down = reorder(state, f, 1);
+      if (up) items.push(this.item(t, "move-up", "Move up", (_e, cx) => cx.spawn((cx) => this.run(cx, up))));
+      if (down) items.push(this.item(t, "move-down", "Move down", (_e, cx) => cx.spawn((cx) => this.run(cx, down))));
       if (current) items.push(this.item(t, "file-current", `Move ${short(current.name, 16)} here`, (_e, cx) => cx.spawn((cx) => this.run(cx, ["file", current.id, f.id]))));
       items.push(
         this.confirm

@@ -1,6 +1,6 @@
 // node mods/trailboss/spaces/tree.test.mjs
 import assert from "node:assert/strict";
-import { layoutTree, spaceOrder, canMoveInto, subtree } from "./tree.js";
+import { layoutTree, spaceOrder, canMoveInto, subtree, reorder } from "./tree.js";
 
 const row = (id, status = null) => ({ w: { id, status }, i: 0, g: null, tree: null });
 const rows = [row("a"), row("b", "working"), row("c", "blocked"), row("d"), row("e")];
@@ -53,5 +53,16 @@ assert.equal(canMoveInto(deep, "a", "a"), false);
 assert.equal(canMoveInto(deep, "x", "b"), true, "two levels under the second: four");
 assert.equal(canMoveInto(deep, "x", "c"), false, "two levels under the third: five");
 assert.equal(canMoveInto(deep, "c", null), true);
+
+// Moving a folder up or down among the folders beside it (others may sit in between).
+const sibs = { folders: [{ id: "a", parent: null }, { id: "k", parent: "a" }, { id: "b", parent: null }, { id: "c", parent: null }] };
+const f = (id) => sibs.folders.find((x) => x.id === id);
+assert.deepEqual(reorder(sibs, f("a"), 1), ["move", "a", "--top", "--before", "c"]);
+assert.deepEqual(reorder(sibs, f("b"), 1), ["move", "b", "--top"], "down to the end: last");
+assert.deepEqual(reorder(sibs, f("c"), -1), ["move", "c", "--top", "--before", "b"]);
+assert.equal(reorder(sibs, f("a"), -1), null, "already first");
+assert.equal(reorder(sibs, f("c"), 1), null, "already last");
+assert.equal(reorder(sibs, f("k"), 1), null, "alone in its folder");
+assert.deepEqual(reorder({ folders: [{ id: "x", parent: "a" }, { id: "y", parent: "a" }] }, { id: "y", parent: "a" }, -1), ["move", "y", "--into", "a", "--before", "x"]);
 
 console.log("spaces tree: ok");
