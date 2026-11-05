@@ -4,7 +4,7 @@
 // agrees. Herdr's order follows the list, so its next / previous space keys go down it.
 //
 // Herdr's spaces mod is Apache-2.0 (LICENSE-APACHE here); `ordered`, `render`, `where`,
-// `place`, `narrow` and `keepColors` below follow base.js. Everything else is Trailboss's.
+// `place`, `narrow`, `keepColors` and `spaceRow` below follow base.js. Everything else is Trailboss's.
 
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
@@ -28,6 +28,12 @@ function place(s, ps) {
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
 const where = (s, ps) => JSON.stringify([s.machine ?? null, place(s, ps)]);
+
+const statusMark = (st, t) =>
+  st === "working" ? svg("mods/workspace-chrome/spinner.svg").size(12).mx(1).flex_none().text_color(t.working).spin(900)
+  : st === "idle" ? div().size(7).mx(3).flex_none().rounded(4).border(1.5).border_color(t.idle ?? t.dim)
+  : st ? div().size(7).mx(3).flex_none().rounded(4).bg(t[st] ?? t.dim)
+  : div().size(7).mx(3).flex_none();
 
 // Runs a `trailboss folders` action; every view sees the new tree through shared state.
 export async function folders(args = []) {
@@ -149,7 +155,7 @@ export class FolderSpaces extends Spaces {
   // Every space's row, in a folder or not: Herdr's, made draggable into folders. Dropped on
   // another space, it goes in that space's folder (and Herdr puts it beside that space).
   row(r, t) {
-    const inner = super.row(r, t);
+    const inner = this.spaceRow(r, t);
     if (!shared(STATE)?.folders?.length) return inner;
     const id = r.w.id;
     return div()
@@ -158,6 +164,66 @@ export class FolderSpaces extends Spaces {
       .on_mouse_move((_e, cx) => this.dragOver(cx, `space:${id}`))
       .on_mouse_up("left", (_e, cx) => this.drop(cx, this.placed[id] ?? null))
       .child(inner);
+  }
+
+  // base.js's row, plus the space's agent status at the end, drawn as the agents list draws
+  // it: working spins, blocked and done a dot in their color, idle a ring, none an empty slot
+  // so the marks stay in one column.
+  spaceRow({ w, i, g, tree }, t) {
+    const on = w.active;
+    const fromIndex = this.pressed === null ? -1 : spaces().findIndex((s) => s.id === this.pressed);
+    const color = (shared("space.colors") ?? {})[w.id] ?? "ansi6";
+    const fill = color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+    return v_flex()
+      .relative()
+      .id(`space-${w.id}`)
+      .px(8)
+      .h(tree ? 28 : 30)
+      .flex_none()
+      .justify_center()
+      .rounded(8)
+      .when(on, (el) => el.bg(t.selected))
+      .when(!on, (el) => el.hover((s) => s.bg(t.hover)))
+      .when(this.pressed === w.id && this.over !== w.id, (el) => el.opacity(0.5))
+      .when(this.pressed !== null && this.over === w.id && this.pressed !== w.id, (el) => el.child(
+        div().absolute().left(0).right(0).h(2).bg(t.accent)
+          .when(fromIndex < i, (line) => line.bottom(0))
+          .when(fromIndex > i, (line) => line.top(0)),
+      ))
+      .on_mouse_down("left", () => {
+        this.pressed = w.id;
+        this.over = w.id;
+      })
+      .on_mouse_move((_e, cx) => {
+        const source = spaces().find((s) => s.id === this.pressed);
+        const over = source && (source.machine ?? null) === (w.machine ?? null) ? w.id : null;
+        if (this.pressed !== null && this.over !== over) {
+          this.over = over;
+          cx.notify();
+        }
+      })
+      .on_mouse_up("left", (_e, cx) => {
+        const from = this.pressed;
+        const over = this.over;
+        this.pressed = null;
+        this.over = null;
+        if (from !== null && over === w.id && from !== w.id) {
+          const index = spaces().findIndex((s) => s.id === w.id);
+          if (index !== -1) run("space.move", { id: from, index: index + 1 });
+        } else if (from === w.id) run("space.select", { id: w.id });
+        cx.notify();
+      })
+      .on_mouse_down("right", () => this.menu(w))
+      .child(
+        h_flex()
+          .gap(9)
+          .items_center()
+          .when(Boolean(tree), (el) => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
+          .when(!tree, (el) => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
+          .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
+          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
+          .child(statusMark(w.status, t)),
+      );
   }
 
   filedRow(x, t) {
