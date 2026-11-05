@@ -30,6 +30,9 @@ assert.deepEqual(show(layoutTree(rows, state, placed)), [
   "- e",
 ]);
 
+// A folder's most urgent status: blocked before working.
+assert.deepEqual(layoutTree(rows, state, placed).items.filter((x) => x.kind === "folder").map((x) => x.status), ["working", "working", "blocked"]);
+
 // Focus shows one folder alone, from depth 0, with nothing else.
 assert.deepEqual(show(layoutTree(rows, state, placed, "f2")), ["[Acme 1 w1]", "  b"]);
 assert.deepEqual(show(layoutTree(rows, state, placed, "nope")).length, 7, "an unknown focus shows everything");

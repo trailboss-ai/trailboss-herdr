@@ -6,6 +6,8 @@
 // before their spaces; spaces not in any folder come after, as Herdr groups them.
 
 const NEEDS = new Set(["blocked", "done"]);
+// Most urgent first: what a folded folder shows for the spaces it hides.
+const URGENCY = ["blocked", "done", "working", "idle"];
 
 // The folders under `parent` (null: the top), in order.
 export const childrenOf = (state, parent) => (state?.folders ?? []).filter((f) => (f.parent ?? null) === parent);
@@ -26,10 +28,11 @@ function rollup(state, folder, bySpace) {
     working: rows.filter((r) => r.w.status === "working").length,
     // A folded folder still shows when something in it needs you.
     needs: rows.some((r) => NEEDS.has(r.w.status)),
+    status: URGENCY.find((s) => rows.some((r) => r.w.status === s)) ?? null,
   };
 }
 
-// Items to draw, top to bottom: {kind: "folder", folder, depth, count, working, needs} and
+// Items to draw, top to bottom: {kind: "folder", folder, depth, count, working, needs, status} and
 // {kind: "space", row, depth, folder}; `rest`: rows in no folder (none when focused).
 // `focus`: a folder id to show alone.
 export function layoutTree(rows, state, placed, focus = null) {

@@ -281,7 +281,7 @@ export class FolderSpaces extends Spaces {
     return d.id !== id && canMoveInto(shared(STATE), d.id, id);
   }
 
-  folderRow({ folder: f, depth, count, working, needs }, t) {
+  folderRow({ folder: f, depth, count, working, needs, status }, t) {
     const fill = MARK[f.color] ?? t.dim;
     const target = this.dndOver === `folder:${f.id}` && this.accepts(f.id);
     return h_flex()
@@ -318,7 +318,9 @@ export class FolderSpaces extends Spaces {
       .child(div().size(10).rounded(3).flex_none().bg(fill))
       .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(f.name))
       .when(working > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.working).child(`${working} working`)))
-      .when(needs, (el) => el.child(div().flex_none().text_color(t.blocked).child("●")))
+      // Folded, its spaces' most urgent status, marked as on their rows.
+      .when(f.folded && Boolean(status), (el) => el.child(statusMark(status, t)))
+      .when(!f.folded && needs, (el) => el.child(div().flex_none().text_color(t.blocked).child("●")))
       .child(div().flex_none().text_size(11).text_color(t.dim).child(String(count)))
       .child(
         div()
