@@ -262,20 +262,23 @@ def main():
             shutil.rmtree(dest)
         shutil.copytree(HERE / "mods" / MOD, dest, ignore=shutil.ignore_patterns(*GENERATED))
         herdr("check", str(dest))
-    if a.update:
-        print("Updated.")
-        return
-
+    # Keys a newer mod added are bound on --update too.
+    bound = False
     for section, binds in ours.items():
         for key, action in binds.items():
             have = keys.get(section, {}).get(key)
             if have and have != action:
-                print(f"keys.json: {key} is already {have}; not bound. Bind another key to {action} by hand.")
+                if not a.update:
+                    print(f"keys.json: {key} is already {have}; not bound. Bind another key to {action} by hand.")
             elif not have:
                 print(f"{dry}keys.json: bind {key} to {action}")
                 keys.setdefault(section, {})[key] = action
-    if not a.dry_run:
+                bound = True
+    if bound and not a.dry_run:
         keys_path.write_text(json.dumps(keys, indent=2) + "\n")
+    if a.update:
+        print("Updated.")
+        return
 
     add_to_layout(a.dry_run)
 

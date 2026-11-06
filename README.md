@@ -12,7 +12,7 @@ python3 install.py                        # --dry-run first to see what it chang
 
 The installer:
 - runs `herdr-app check` and copies `mods/trailboss/` to `~/.config/herdr-app/mods/`;
-- binds **Alt+Shift+T** to the dashboard and **Alt+Shift+I** to the Insights window, unless a key is already taken (then it tells you);
+- binds **Alt+Shift+T** to the dashboard, **Alt+Shift+I** to the Insights window and **Alt+Shift+C** to the thread pane, unless a key is already taken (then it tells you; `--update` binds keys a newer mod added);
 - adds a 320px block at the right of the current layout's status bar. If that layout is one of Herdr's own (`main`, …), which Herdr replaces on every start, it's cloned first as `<name>-trailboss` and switched to. A layout of your own is edited in place, after a backup in `~/.config/herdr-app/data/trailboss/backups/`.
 
 `--update` copies a newer mod over an install; `--uninstall` takes the block and the keys out and removes the mod.
@@ -81,6 +81,18 @@ Your layout's spaces list becomes Trailboss's: Herdr's own list (worktrees under
 - Herdr's next / previous space keys follow the list as it shows.
 
 The folders live in `trailboss folders` (`~/.local/share/trailboss/folders.json`), so other frontends see the same ones.
+
+## Thread
+
+Press **Alt+Shift+C** in an agent's terminal (it needs the status-bar block in the layout). A pane opens to its right with only the conversation: each prompt you sent and the reply that came back, newest first, a band per day, and the turn's cost. Press it again to move to the pane.
+
+- **Search** narrows the list to turns with every word, in the prompt or the reply.
+- **Click a turn** to read it: the prompt and the reply as formatted Markdown (select text to copy part of it), and the turn's model, tokens, cost, time and tool results.
+- **Copy reply**, **Copy prompt**, and **Copy code** for each code block.
+- **Quote into the prompt** pastes the reply into the agent's prompt as a `>` quote, with a blank line for your comment. It goes through the clipboard, which it replaces, and never presses Enter.
+- **Agent messages:** reports the agent sent into the session itself, such as a background task finishing, are hidden; the button shows them.
+
+It follows the session running in that terminal, including a new one after `/clear`, and reloads as the agent works. It reads `trailboss thread`, which works for every agent Trailboss indexes; thinking and tool output aren't shown.
 
 ## What it does
 

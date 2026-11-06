@@ -11,6 +11,7 @@ import { EditorView } from "./files/editor.js";
 import { Changes } from "./files/changes.js";
 import { Review } from "./files/review.js";
 import { FolderSpaces, FolderMenu, FolderEdit } from "./spaces/folders.js";
+import { Thread, openThread } from "./fleet/thread.js";
 
 // Trailboss in Herdr: a thin frontend over the `trailboss` CLI's --json output. One mod,
 // several views, picked by the `view` prop a layout block or overlay passes:
@@ -27,6 +28,7 @@ import { FolderSpaces, FolderMenu, FolderEdit } from "./spaces/folders.js";
 //   changes         agent-aware git changes for the side panel (replaces Changes)
 //   review          review and undo one agent session's changes (a window, from Changes)
 //   spaces          Herdr's spaces list with folders (replaces spaces)
+//   thread          an agent terminal's conversation, beside it (Alt+Shift+C opens it)
 //   quota-detail, quota-picker, session-agents, files-menu, folder-menu, folder-edit: their popups
 
 const VIEWS = {
@@ -45,6 +47,7 @@ const VIEWS = {
   spaces: FolderSpaces,
   "folder-menu": FolderMenu,
   "folder-edit": FolderEdit,
+  thread: Thread,
 };
 
 export default class Trailboss extends View {
@@ -53,12 +56,17 @@ export default class Trailboss extends View {
     const Kind = VIEWS[p.view] ?? (p.overlay ? Dashboard : Block);
     this.view = new Kind();
     this.view.init(p, cx);
-    // mod.open can't pass props, so Alt+Shift+I sends "trailboss.insights" instead. Every shown
+    // mod.open can't pass props, so Alt+Shift+I sends "trailboss.insights" (and Alt+Shift+C
+    // "trailboss.thread") instead. Every shown
     // copy gets it; only the status-bar block (always shown) acts, so it opens once.
     // ponytail: no block in the layout means no key; the dashboard button still works.
     if (Kind === Block) {
       cx.spawn(async () => {
-        for (;;) if ((await nextCommand()) === "insights") openInsights();
+        for (;;) {
+          const c = await nextCommand();
+          if (c === "insights") openInsights();
+          else if (c === "thread") openThread();
+        }
       });
     }
   }
