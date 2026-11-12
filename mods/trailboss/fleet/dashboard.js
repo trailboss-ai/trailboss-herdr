@@ -3,6 +3,20 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme, props, closeOverlay, notify, run, shared, setShared } from "herdr";
 import { liveTree, liveList } from "./tree.js";
 import { statusFor, modelParts, contextText, turnText, resources, CONTEXT_WARN } from "./live.js";
+import {
+  target,
+  sendArgs,
+  tone,
+  CHECKING,
+  byWhere,
+  queuedFor,
+  queuedElsewhere,
+  queuedText,
+  nothingLooking,
+  NOTHING_LOOKING,
+  summary,
+  removedText,
+} from "./send.js";
 import { openInsights } from "../usage/insights.js";
 import { ICON, cliStatus, setupStep, blockInLayout, tb, plural, money, daysAgo, short, statusColor } from "../lib.js";
 
@@ -35,6 +49,14 @@ export class Dashboard {
         if (n === this.typed) await this.load(cx, "Sessions");
       });
     });
+    // Live's send bar: the checked rows' `send --to` targets, the message, and what came of it.
+    this.picked = new Set();
+    this.message = InputState.new({ placeholder: "Message the checked agents…" });
+    this.message.on("submit", (_e, cx) => cx.spawn((cx) => this.send(cx, false)));
+    this.sending = null; // the targets while `send --yes` is out (it checks before answering)
+    this.sent = null; // its rows
+    this.sentMap = null; // those rows by `where`, for the Live rows that show them
+    this.sendError = null;
     this.cli = null; // cliStatus() while the CLI is missing or too old
     this.inLayout = true; // whether the status-bar block is in the current layout
     this.setup = null; // a setup step's progress or failure
@@ -105,6 +127,8 @@ export class Dashboard {
       if (tab === "Live") {
         this.rows.Live = await tb(["live"]);
         this.rows.Lost = await tb(["resume", "--dry-run"]);
+        // Queued messages are an extra: Live still shows if `queue` fails.
+        this.rows.Queue = await tb(["queue"]).catch(() => this.rows.Queue ?? []);
       } else if (tab === "Sessions") {
         // An empty box lists recent sessions; words search them, best hit per session.
         const q = this.input.value().trim();
@@ -270,6 +294,185 @@ export class Dashboard {
       );
   }
 
+  // ---------------------------------------------------------------- Live's send bar
+
+  // A Live row with its checkbox in front: checked rows get the send bar's message. Rows
+  // with no terminal to type into get a blank instead.
+  pickable(t, r, i, row) {
+    const to = target(r);
+    const on = to != null && this.picked.has(to);
+    return h_flex()
+      .items_center()
+      .child(
+        div()
+          .id(`pick-${i}`)
+          .w(22)
+          .flex_none()
+          .pl(8)
+          .text_size(12)
+          .text_color(on ? t.accent : t.dim)
+          .when(to != null, (el) =>
+            el
+              .cursor_pointer()
+              .hover((s) => s.text_color(t.foreground))
+              .on_click((_e, cx) => {
+                if (!this.picked.delete(to)) this.picked.add(to);
+                cx.notify();
+              }),
+          )
+          .child(to == null ? "" : on ? "☑" : "☐"),
+      )
+      .child(div().flex_1().min_w(0).child(row));
+  }
+
+  // Under a Live row: what `send` did there ("checking…" while it looks), and the messages
+  // queued for it, each with Take back.
+  sendNotes(t, r, i) {
+    const out = [];
+    const small = (id, text, color) => h_flex().id(id).pl(44).pr(10).pb(2).gap(8).text_size(11.5).text_color(color).child(text);
+    const to = target(r);
+    const res = this.sending ? (this.sending.has(to) ? { action: null } : null) : this.sentMap?.[r.where];
+    if (res) {
+      const [label, c] = res.action == null ? CHECKING : tone(res.action);
+      out.push(small(`sent-${i}`, div().truncate().child(res.detail ? `${label} · ${res.detail}` : label), t[c] ?? t.muted));
+    }
+    queuedFor(this.rows.Queue, r).forEach((q, j) => out.push(this.queuedLine(t, q, `q-${i}-${j}`, small)));
+    return out;
+  }
+
+  // One queued message, with Take back while it can still be taken back. `prefix` names the
+  // place when it isn't under its row.
+  queuedLine(t, q, id, small, prefix = "") {
+    const [label, c] = tone(q.state);
+    return small(id, div().flex_1().min_w(0).truncate().child(`${prefix}${label} ${queuedText(q)}`), t[c] ?? t.muted).when(
+      q.state !== "typing",
+      (el) =>
+        el.child(
+          div()
+            .id(`${id}-rm`)
+            .flex_none()
+            .cursor_pointer()
+            .text_color(t.dim)
+            .hover((s) => s.text_color(t.foreground))
+            .tooltip(`trailboss queue rm ${q.id}`)
+            .on_click((_e, cx) => cx.spawn((cx) => this.takeBack(cx, q.id)))
+            .child("Take back"),
+        ),
+    );
+  }
+
+  // Types the message into the checked agents (`send --yes`), or with `queue`, keeps it for
+  // any that are mid-turn and types it when that turn ends (`send --queue --yes`).
+  async send(cx, queue) {
+    const message = this.message.value().trim();
+    if (this.sending || !message) return;
+    const live = new Set((this.rows.Live ?? []).map(target).filter(Boolean));
+    const targets = [...this.picked].filter((x) => live.has(x));
+    this.sendError = targets.length ? null : "Check the agents to send it to.";
+    if (!targets.length) return cx.notify();
+    this.sending = new Set(targets);
+    this.sent = null;
+    this.sentMap = null;
+    cx.notify();
+    try {
+      this.sent = await tb(sendArgs(message, targets, queue));
+      this.sentMap = byWhere(this.sent, this.rows.Live).map;
+      this.message.set_value("");
+    } catch (e) {
+      this.sendError = String(e?.message ?? e);
+    } finally {
+      this.sending = null;
+    }
+    cx.notify();
+    await this.load(cx, "Live");
+  }
+
+  async takeBack(cx, id) {
+    try {
+      const r = removedText(await tb(["queue", "rm", id]), id);
+      notify({ ...r, icon: ICON });
+    } catch (e) {
+      notify({ title: `Couldn't take back ${id}`, body: String(e?.message ?? e), level: "error" });
+    }
+    await this.load(cx, "Live");
+  }
+
+  sendBar(t) {
+    const rows = this.rows.Live ?? [];
+    const notes = [];
+    if (this.sendError) notes.push([this.sendError, t.blocked]);
+    if (this.sending) notes.push([`Sending to ${plural(this.sending.size, "agent")}… checking each.`, t.dim]);
+    if (this.sent) {
+      notes.push([summary(this.sent), t.muted]);
+      // Rows no Live row shows: a target that found no agent, or one that has since gone.
+      byWhere(this.sent, rows).rest.forEach((r) => notes.push([`${r.where}: ${tone(r.action)[0]} · ${r.detail}`, t.dim]));
+    }
+    if (nothingLooking(this.rows.Queue, this.sent)) notes.push([NOTHING_LOOKING, t.blocked]);
+
+    const targets = rows.map(target).filter(Boolean);
+    const all = targets.length > 0 && targets.every((x) => this.picked.has(x));
+    const n = targets.filter((x) => this.picked.has(x)).length;
+    const busy = Boolean(this.sending);
+    const note = (id, text, color) => h_flex().id(id).gap(8).text_size(11.5).text_color(color).child(text);
+    const button = (id, label, tip, queue, solid) =>
+      div()
+        .id(id)
+        .flex_none()
+        .px(10)
+        .py(5)
+        .rounded(6)
+        .text_size(12)
+        .bg(solid ? t.solid : t.surface)
+        .border_1()
+        .border_color(solid ? t.solid : t.border)
+        .text_color(solid ? t.solid_foreground : t.foreground)
+        .tooltip(tip)
+        .when(busy, (el) => el.opacity(0.5))
+        .when(!busy, (el) =>
+          el
+            .cursor_pointer()
+            .hover((s) => s.opacity(0.85))
+            .on_click((_e, cx) => cx.spawn((cx) => this.send(cx, queue))),
+        )
+        .child(label);
+    return v_flex()
+      .id("send-bar")
+      .px(12)
+      .py(8)
+      .gap(6)
+      .border_t(1)
+      .border_color(t.border)
+      .children(notes.map(([text, color], i) => note(`send-note-${i}`, div().flex_1().min_w(0).truncate().child(text), color)))
+      // Queued for an agent Live doesn't show (gone, or its session changed): typed only into that session.
+      .children(
+        queuedElsewhere(this.rows.Queue, rows).map((q, i) => this.queuedLine(t, q, `send-q-${i}`, note, `${q.where ?? "?"}: `)),
+      )
+      .child(
+        h_flex()
+          .gap(8)
+          .items_center()
+          .child(
+            div()
+              .id("pick-all")
+              .flex_none()
+              .cursor_pointer()
+              .text_size(12)
+              .text_color(n ? t.accent : t.dim)
+              .hover((s) => s.text_color(t.foreground))
+              .tooltip(all ? "Uncheck all" : "Check every agent")
+              .on_click((_e, cx) => {
+                if (all) this.picked.clear();
+                else targets.forEach((x) => this.picked.add(x));
+                cx.notify();
+              })
+              .child(`${all ? "☑" : "☐"} ${n} checked`),
+          )
+          .child(Input.new(this.message).flex_1().h(28).px(8).rounded(6).border_1().border_color(t.input).bg(t.background).text_size(12))
+          .child(button("send", "Send", "Type it now where the agent is idle; the rest are skipped", false, true))
+          .child(button("queue", "Queue", "Like Send, but an agent mid-turn gets it when its turn ends", true, false)),
+      );
+  }
+
   body(t) {
     const tab = this.tab;
     const err = this.errors[tab] ?? this.error;
@@ -302,7 +505,7 @@ export class Dashboard {
             ),
           ),
       );
-      out.push(this.head(t, [["Where", 260], ["Status", 96], ["Cost", 70], ["Session", null]]));
+      out.push(this.pickable(t, null, "head", this.head(t, [["Where", 260], ["Status", 96], ["Cost", 70], ["Session", null]])));
       // By folder: agents sharing a folder under one heading, sub-agents indented under the
       // agent that started them. List: one row each, as `live` returns them.
       const lines = tree ? liveTree(rows) : liveList(rows);
@@ -324,7 +527,7 @@ export class Dashboard {
           );
           return;
         }
-        out.push(this.liveRow(t, r, depth, tree, i));
+        out.push(this.pickable(t, r, i, this.liveRow(t, r, depth, tree, i)), ...this.sendNotes(t, r, i));
       });
       if (!rows.length && this.rows.Live) out.push(this.note(t, "No agents running."));
       const lost = this.rows.Lost ?? [];
@@ -601,7 +804,8 @@ export class Dashboard {
               .child("✕"),
           ),
       )
-      .child(v_flex().id("tb-body").flex_1().min_h(0).p(8).gap(1).overflow_y_scrollbar().children(this.body(t)));
+      .child(v_flex().id("tb-body").flex_1().min_h(0).p(8).gap(1).overflow_y_scrollbar().children(this.body(t)))
+      .when(this.tab === "Live" && Boolean(this.bin) && !this.cli, (el) => el.child(this.sendBar(t)));
   }
 
   // ---------------------------------------------------------------- the status-bar block
