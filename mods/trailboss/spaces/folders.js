@@ -11,7 +11,8 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, machines, run, theme, shared, setShared, openOverlay, closeOverlay, notify, focused, layout } from "herdr";
 import Spaces from "./base.js";
 import { tb, short, err } from "../lib.js";
-import { layoutTree, spaceOrder, canMoveInto, reorder } from "./tree.js";
+import { layoutTree, spaceOrder, canMoveInto, reorder, needsTip } from "./tree.js";
+import { NEEDS_KEY } from "../fleet/live.js";
 
 export const STATE = "trailboss.folders"; // the last `trailboss --json folders`, for every view
 export const FOCUS = "trailboss.focus"; // a folder id shown alone, or null
@@ -34,6 +35,10 @@ const statusMark = (st, t) =>
   : st === "idle" ? div().size(7).mx(3).flex_none().rounded(4).border(1.5).border_color(t.idle ?? t.dim)
   : st ? div().size(7).mx(3).flex_none().rounded(4).bg(t[st] ?? t.dim)
   : div().size(7).mx(3).flex_none();
+
+// The status mark, with why its agents need you on hover (from the status-bar block's look).
+const markWithTip = (id, st, t, tip) =>
+  tip ? div().id(`mark-${id}`).flex_none().tooltip(tip).child(statusMark(st, t)) : statusMark(st, t);
 
 // Runs a `trailboss folders` action; every view sees the new tree through shared state.
 export async function folders(args = []) {
@@ -222,8 +227,14 @@ export class FolderSpaces extends Spaces {
           .when(!tree, (el) => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
           .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
-          .child(statusMark(w.status, t)),
+          .child(markWithTip(w.id, w.status, t, this.needsTip([w]))),
       );
+  }
+
+  // Why these spaces' agents need you, for a tooltip; panes are read only when one does.
+  needsTip(list, named = false) {
+    const needs = shared(NEEDS_KEY);
+    return needs && Object.keys(needs).length ? needsTip(list, panes(), needs, named) : null;
   }
 
   filedRow(x, t) {
@@ -281,8 +292,10 @@ export class FolderSpaces extends Spaces {
     return d.id !== id && canMoveInto(shared(STATE), d.id, id);
   }
 
-  folderRow({ folder: f, depth, count, working, needs, status }, t) {
+  folderRow({ folder: f, depth, count, working, needs, status, spaces: inside }, t) {
     const fill = MARK[f.color] ?? t.dim;
+    let why;
+    const tip = () => (why ??= this.needsTip(inside, true));
     const target = this.dndOver === `folder:${f.id}` && this.accepts(f.id);
     return h_flex()
       .id(`folder-${f.id}`)
@@ -319,8 +332,10 @@ export class FolderSpaces extends Spaces {
       .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(f.name))
       .when(working > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.working).child(`${working} working`)))
       // Folded, its spaces' most urgent status, marked as on their rows.
-      .when(f.folded && Boolean(status), (el) => el.child(statusMark(status, t)))
-      .when(!f.folded && needs, (el) => el.child(div().flex_none().text_color(t.blocked).child("●")))
+      .when(f.folded && Boolean(status), (el) => el.child(markWithTip(`f-${f.id}`, status, t, tip())))
+      .when(!f.folded && needs, (el) =>
+        el.child(div().id(`needs-${f.id}`).flex_none().text_color(t.blocked).when(Boolean(tip()), (d) => d.tooltip(tip())).child("●")),
+      )
       .child(div().flex_none().text_size(11).text_color(t.dim).child(String(count)))
       .child(
         div()

@@ -1,9 +1,10 @@
 import { div, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { exec, theme, openOverlay, notify, shared, setShared } from "herdr";
+import { exec, theme, openOverlay, notify, shared, setShared, home, readTextFile } from "herdr";
 import { MOD, ICON, cliStatus, setupStep, tb, plural, money, ymd, short } from "../lib.js";
 import { quotaRows } from "../usage/quota.js";
 import { toWarn, warning } from "../usage/pace.js";
+import { needsWords, detailsOn, needsByTerminal, NEEDS_KEY } from "./live.js";
 
 // The status-bar block: agents running, working / blocked, today's cost and the Claude
 // 5-hour window. It keeps `trailboss` tracking which session runs in which terminal (every
@@ -14,6 +15,27 @@ const POLL_MS = 15000;
 const TODAY_EVERY = 4; // polls between cost refreshes (~1 min)
 const QUOTA_EVERY = 20; // polls between quota checks (~5 min): those go to the network
 const WARNED = "trailboss.quota.warned";
+
+// Trailboss's config file (`~/.config/trailboss/config.json`, or the platform's config folder,
+// where the CLI keeps it), or
+// null when there's none or it can't be read.
+let configDirs;
+async function readConfig() {
+  if (!configDirs) {
+    configDirs = [`${home()}/.config`, `${home()}/Library/Application Support`];
+    try {
+      const xdg = (await exec("/bin/sh", ["-c", 'printf %s "$XDG_CONFIG_HOME"'])).stdout?.trim();
+      if (xdg) configDirs.unshift(xdg);
+    } catch {}
+  }
+  for (const d of configDirs) {
+    try {
+      const text = await readTextFile(`${d}/trailboss/config.json`);
+      if (text) return JSON.parse(text);
+    } catch {}
+  }
+  return null;
+}
 
 // Workspaces where two or more agents are working at once: they can overwrite each other.
 export function crowded(live) {
@@ -36,6 +58,7 @@ export class Block {
     this.cli = null; // cliStatus() while the CLI is missing or too old
     this.setup = null; // "Installing…", or why installing failed
     this.loaded = false; // the first poll (which builds the index on a first run) is done
+    this.details = false; // the config's notifications.details: say what an agent asks, not just its kind
     cx.spawn((cx) => this.start(cx));
     cx.timer.every(POLL_MS, (cx) => cx.spawn((cx) => this.poll(cx)));
   }
@@ -90,17 +113,29 @@ export class Block {
         });
         continue;
       }
-      if (e.kind === "ended" || (e.in_herdr && !all)) continue;
+      // Every turn's end (turn_finished) and an agent ending aren't news on the desktop.
+      if ((e.kind !== "needs_you" && e.kind !== "finished") || (e.in_herdr && !all)) continue;
       const who = `${e.agent} ${e.where ?? ""}`.trim();
       const mins = Math.floor((e.worked_ms ?? 0) / 60000);
+      // Anyone near the screen sees a notification: only the kind of request, as the CLI's own.
+      const why = needsWords(e, this.details);
       notify({
-        title: e.kind === "needs_you" ? `${who} needs you` : `${who} finished${mins ? ` after ${mins} min` : ""}`,
+        title:
+          e.kind === "needs_you"
+            ? `${who} needs you${why ? `: ${why}` : ""}`
+            : `${who} finished${mins ? ` after ${mins} min` : ""}`,
         body: e.title ?? e.cwd ?? "",
         level: e.kind === "needs_you" ? "warning" : "success",
         icon: ICON,
         ...(e.terminal && e.in_herdr ? { action: { name: "pane.focus", args: { terminal: e.terminal } } } : {}),
       });
     }
+  }
+
+  // For the spaces sidebar, only when it changed (shared state is saved to disk).
+  shareNeeds(live) {
+    const now = needsByTerminal(live, this.details);
+    if (JSON.stringify(now) !== JSON.stringify(shared(NEEDS_KEY) ?? {})) setShared(NEEDS_KEY, now);
   }
 
   // Once per plan window that's on pace to run out before it resets.
@@ -115,10 +150,12 @@ export class Block {
     if (!this.bin || this.busy) return;
     this.busy = true;
     try {
+      if (this.polls % TODAY_EVERY === 0) this.details = detailsOn(await readConfig());
       // `events` is `live` plus what changed since the last look.
       const { live, events } = await tb(["events"]);
       this.live = live;
       this.announce(events);
+      this.shareNeeds(live);
       if (this.polls % TODAY_EVERY === 0) {
         const u = await tb(["usage", "--by", "all", "--since", ymd(new Date())]);
         this.today = u[0]?.cost_usd ?? 0;

@@ -79,7 +79,7 @@ Your layout's spaces list becomes Trailboss's: Herdr's own list (worktrees under
 - **New folder** at the top; right-click a folder for New space here, New folder inside, Edit… (name, color, start folder, rules), Show only this folder, Fold, Move the current space here, and Remove folder (its spaces stay).
 - **Drag** a space onto a folder to put it there, onto a space to put it beside that one, or onto **Drop here for the top level**. Drag a folder onto another to nest it.
 - **Rules** file spaces by themselves: a folder name anywhere in the path (`billing`), a path (`~/code/client-*`, `*` is one folder name), or a machine (`machine:vm-*`). The most specific rule wins; a space you put somewhere by hand stays there.
-- A folded folder still shows ● when something in it needs you, and how many agents are working.
+- A folded folder still shows ● when something in it needs you, and how many agents are working. Hover a space's status, or that ●, for why its agents need you ("codex needs you: Run a command").
 - Herdr's next / previous space keys follow the list as it shows.
 
 The folders live in `trailboss folders` (`~/.local/share/trailboss/folders.json`), so other frontends see the same ones.
@@ -100,13 +100,13 @@ It follows the session running in that terminal, including a new one after `/cle
 
 **The block** shows agents running, how many are working or waiting for you, today's cost at API prices, and the Claude 5-hour window with its pace (red when it's on track to run out). A **Resume N** button appears when a terminal has lost its agent. Click the block for the dashboard.
 
-In the background it runs `trailboss events` every 15 s, and notifies when an agent outside Herdr's own terminals (VS Code, a plain terminal) needs you or finishes a turn of 30 s or more. Herdr notifies about its own terminals itself. It also warns, wherever the agents run, when two are working in the same folder (and shows **⚠ N in one folder** in the block), when an agent has stopped making progress (**⚠ N stuck**), and once per plan window when usage is on pace to run out before it resets ("Claude 5h limit in ~40m at this pace"). Each look also records which session runs in which terminal. When Herdr starts it runs `trailboss resume --auto`, which brings back what a reboot lost (after a Herdr restart alone, use the button). A notification says what came back and what didn't, and why.
+In the background it runs `trailboss events` every 15 s, and notifies when an agent outside Herdr's own terminals (VS Code, a plain terminal) needs you, and why ("needs you: Run a command"), or finishes a turn of 30 s or more. Like the CLI's own notifications, it says only the kind of request unless `notifications.details` is `true` in Trailboss's config, then the request itself ("Run: npm test"). Herdr notifies about its own terminals itself. It also warns, wherever the agents run, when two are working in the same folder (and shows **⚠ N in one folder** in the block), when an agent has stopped making progress (**⚠ N stuck**), and once per plan window when usage is on pace to run out before it resets ("Claude 5h limit in ~40m at this pace"). Each look also records which session runs in which terminal. When Herdr starts it runs `trailboss resume --auto`, which brings back what a reboot lost (after a Herdr restart alone, use the button). A notification says what came back and what didn't, and why.
 
 **The dashboard** (Alt+Shift+T, or click the block):
 
 | Tab | Shows | Click a row to |
 |---|---|---|
-| Live | every running agent: terminal, status, cost so far, session. **By folder** (default) puts each folder's agents under its heading (⚠ when more than one is working) and indents agents under the agent that started them; **List** shows one row each. Lost sessions and a Resume now button | go to its terminal |
+| Live | every running agent: terminal, status and for how long ("blocked 12m"), cost so far, session; under it why it needs you (else its turn), its model, effort and context ("Opus 5.5 · High · 38% context", the share standing out above 80%), and its CPU and memory. Agents that need you come first, then finished, working and idle ones, pinned agents (`trailboss live --pin`) above them all. **By folder** (default) puts each folder's agents under its heading (⚠ when more than one is working), folders with the most urgent agent first, and indents agents under the agent that started them; **List** shows one row each. Lost sessions and a Resume now button | go to its terminal |
 | Sessions | recent sessions; type to full-text search every agent's sessions | reopen that session in a new tab, in its folder |
 | Usage | cost per day for two weeks; cost per model for 30 days | |
 | Quota | plan windows, % used, reset time, pace | |

@@ -29,10 +29,27 @@ function rollup(state, folder, bySpace) {
     // A folded folder still shows when something in it needs you.
     needs: rows.some((r) => NEEDS.has(r.w.status)),
     status: URGENCY.find((s) => rows.some((r) => r.w.status === s)) ?? null,
+    spaces: rows.map((r) => r.w),
   };
 }
 
-// Items to draw, top to bottom: {kind: "folder", folder, depth, count, working, needs, status} and
+// The tooltip for spaces' status: why their agents need you, one line each, from the shared
+// { terminal: [{ agent, why }] } the status-bar block keeps (`why` already only the kind of
+// request unless details are on). `named`: start each line with its space's name (a folder's
+// tooltip). null when none needs you.
+export function needsTip(spaces, panes, needs, named = false) {
+  const lines = [];
+  for (const s of spaces ?? []) {
+    const tabs = new Set((s.tabs ?? []).map((c) => c.id));
+    for (const p of panes ?? []) {
+      if (!p.terminal || !tabs.has(p.tab)) continue;
+      for (const n of needs?.[p.terminal] ?? []) lines.push(`${named ? `${s.name} · ` : ""}${n.agent ?? "Agent"} needs you: ${n.why}`);
+    }
+  }
+  return lines.length ? [...new Set(lines)].join("\n") : null;
+}
+
+// Items to draw, top to bottom: {kind: "folder", folder, depth, count, working, needs, status, spaces} and
 // {kind: "space", row, depth, folder}; `rest`: rows in no folder (none when focused).
 // `focus`: a folder id to show alone.
 export function layoutTree(rows, state, placed, focus = null) {
