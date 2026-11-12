@@ -1,7 +1,8 @@
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme, props, closeOverlay, notify, run, shared, setShared } from "herdr";
-import { liveTree } from "./tree.js";
+import { liveTree, liveList } from "./tree.js";
+import { statusFor, modelParts, contextText, turnText, resources, CONTEXT_WARN } from "./live.js";
 import { openInsights } from "../usage/insights.js";
 import { ICON, cliStatus, setupStep, blockInLayout, tb, plural, money, daysAgo, short, statusColor } from "../lib.js";
 
@@ -203,6 +204,72 @@ export class Dashboard {
     return div().px(10).py(6).text_size(12).text_color(color ?? t.dim).child(text);
   }
 
+  // One agent in the Live tab: where, status and since when, cost and session; under it why
+  // it needs you (else its turn), what it runs as and its processes' load. Click to focus
+  // its terminal.
+  liveRow(t, r, depth, tree, i) {
+    const sharing = r.shares_with?.length ?? 0;
+    const parent = r.parent ? `↳ from ${r.parent.split(" ")[0]} · ` : "";
+    const now = Date.now();
+    const indent = `${"   ".repeat(depth)}${depth ? "   " : ""}`;
+    // The context's share stays quiet until it's nearly full.
+    const ctx = contextText(r);
+    const full = (r.context_pct ?? 0) > CONTEXT_WARN;
+    const runs = modelParts(r);
+    const load = resources(r);
+    // Only Herdr's own terminals can be focused from here.
+    const focus =
+      r.terminal && (r.host ?? "herdr") === "herdr"
+        ? () => {
+            run("pane.focus", { terminal: r.terminal });
+            closeOverlay(this.overlay);
+          }
+        : null;
+    return v_flex()
+      .id(`live-${i}`)
+      .rounded(5)
+      .when(Boolean(focus), (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click(focus))
+      .child(
+        this.line(t, `live-${i}-top`, [
+          [`${"   ".repeat(depth)}${depth ? "└ " : ""}${r.where}`, 260],
+          r.stuck ? [`stuck ${r.quiet_min}m`, 96, t.blocked] : [statusFor(r, now), 96, statusColor(t, r.status)],
+          [money(r.cost_usd), 70, t.muted],
+          !tree && sharing
+            ? [`${parent}⇄ ${sharing + 1} in folder · ${r.title ?? r.cwd}`, null, t.working]
+            : [`${tree ? "" : parent}${r.title ?? r.cwd ?? ""}`, null, t.muted],
+        ]),
+      )
+      .child(
+        h_flex()
+          .id(`live-${i}-under`)
+          .px(10)
+          .pb(4)
+          .gap(12)
+          .text_size(11)
+          .text_color(t.dim)
+          .child(
+            div()
+              .flex_1()
+              .min_w(0)
+              .truncate()
+              .when(Boolean(r.needs), (el) => el.text_color(t.blocked))
+              .child(`${indent}${r.pinned ? "pinned · " : ""}${r.needs ?? turnText(r, now)}`),
+          )
+          .when(runs.length > 0, (el) =>
+            el.child(
+              h_flex()
+                .flex_none()
+                .gap(4)
+                .child(div().text_color(t.muted).child(runs.filter((p) => p !== ctx).join(" · ")))
+                .when(Boolean(ctx), (el) =>
+                  el.child(div().text_color(full ? t.blocked : t.dim).child(`${runs.length > 1 ? "· " : ""}${ctx}`)),
+                ),
+            ),
+          )
+          .when(Boolean(load), (el) => el.child(div().flex_none().w(110).child(load))),
+      );
+  }
+
   body(t) {
     const tab = this.tab;
     const err = this.errors[tab] ?? this.error;
@@ -235,10 +302,10 @@ export class Dashboard {
             ),
           ),
       );
-      out.push(this.head(t, [["Where", 260], ["Status", 80], ["Cost", 70], ["Session", null]]));
+      out.push(this.head(t, [["Where", 260], ["Status", 96], ["Cost", 70], ["Session", null]]));
       // By folder: agents sharing a folder under one heading, sub-agents indented under the
       // agent that started them. List: one row each, as `live` returns them.
-      const lines = tree ? liveTree(rows) : rows.map((row) => ({ row, depth: 0 }));
+      const lines = tree ? liveTree(rows) : liveList(rows);
       lines.forEach(({ group: g, row: r, depth }, i) => {
         if (g) {
           // More than one agent working in one folder can overwrite each other's changes.
@@ -250,33 +317,14 @@ export class Dashboard {
               .pb(2)
               .text_size(11.5)
               .text_color(busy ? t.working : t.dim)
-              .child(`${busy ? "⚠ " : ""}${g.name} · ${g.count} ${g.count === 1 ? "agent" : "agents"}${g.working ? ` · ${g.working} working` : ""}`),
+              .child(
+                `${busy ? "⚠ " : ""}${g.name} · ${g.count} ${g.count === 1 ? "agent" : "agents"}` +
+                  `${g.needs ? ` · ${g.needs} ${g.needs === 1 ? "needs" : "need"} you` : ""}${g.working ? ` · ${g.working} working` : ""}`,
+              ),
           );
           return;
         }
-        const sharing = r.shares_with?.length ?? 0;
-        const parent = r.parent ? `↳ from ${r.parent.split(" ")[0]} · ` : "";
-        out.push(
-          this.line(
-            t,
-            `live-${i}`,
-            [
-              [`${"   ".repeat(depth)}${depth ? "└ " : ""}${r.where}`, 260],
-              r.stuck ? [`stuck ${r.quiet_min}m`, 80, t.blocked] : [r.status, 80, statusColor(t, r.status)],
-              [money(r.cost_usd), 70, t.muted],
-              !tree && sharing
-                ? [`${parent}⇄ ${sharing + 1} in folder · ${r.title ?? r.cwd}`, null, t.working]
-                : [`${tree ? "" : parent}${r.title ?? r.cwd ?? ""}`, null, t.muted],
-            ],
-            // Only Herdr's own terminals can be focused from here.
-            r.terminal && (r.host ?? "herdr") === "herdr"
-              ? () => {
-                  run("pane.focus", { terminal: r.terminal });
-                  closeOverlay(this.overlay);
-                }
-              : null,
-          ),
-        );
+        out.push(this.liveRow(t, r, depth, tree, i));
       });
       if (!rows.length && this.rows.Live) out.push(this.note(t, "No agents running."));
       const lost = this.rows.Lost ?? [];
