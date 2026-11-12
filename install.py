@@ -2,7 +2,7 @@
 """Install the Trailboss mod into Herdr app.
 
   python3 install.py              install
-  python3 install.py --update     copy the mod over an earlier install
+  python3 install.py --update     copy the mod over an earlier install, keeping files you changed
   python3 install.py --uninstall  take it out of your layouts and keys, remove the mod
   python3 install.py --take-over  put Trailboss where insights, session-history,
                                                      stats and usage-bar were, then remove those mods
@@ -24,9 +24,14 @@ to keep tracking sessions and to resume them after a reboot. Herdr's own layouts
 switched to); a layout of your own is edited in place, after a backup in
 data/trailboss/backups/.
 
+What it installed (each file's SHA-256 and the keys it bound) goes in data/trailboss/install.json,
+for `trailboss doctor`; --uninstall removes it.
+
 Adapted from herdr-agent-resume-plus's installer (same author, MIT).
 """
 import argparse
+import fnmatch
+import hashlib
 import json
 import os
 import shutil
@@ -48,6 +53,40 @@ TAKES_OVER = {"session-history": "sessions", "stats": "stats", "usage-bar": "quo
 ICONS = {"mods/stats/stats.svg": "mods/trailboss/icons/stats.svg",
          "mods/session-history/icon.svg": "mods/trailboss/icons/sessions.svg"}
 GENERATED = ("gpui-kit.d.ts", "herdr.d.ts", "jsconfig.json", "__pycache__")
+# What was installed, in Herdr's data/trailboss/: each file's SHA-256 (paths relative to the
+# mod's folder) and the keys bound, so `trailboss doctor` can tell which files were changed since.
+RECORD = Path("data") / MOD / "install.json"
+
+
+def sha256(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def mod_files(root):
+    """The mod's files under root, as relative paths with /, leaving out Herdr's generated ones."""
+    out = []
+    for f in sorted(root.rglob("*")):
+        rel = f.relative_to(root)
+        if f.is_file() and not any(fnmatch.fnmatch(part, g) for part in rel.parts for g in GENERATED):
+            out.append(rel.as_posix())
+    return out
+
+
+def read_record(home):
+    try:
+        record = json.loads((home / RECORD).read_text())
+    except (OSError, ValueError):
+        return {}
+    return record if isinstance(record, dict) else {}
+
+
+def changed_by_hand(dest, record):
+    """Installed files whose bytes differ from the hash recorded when they were installed."""
+    files = record.get("files")
+    if not isinstance(files, dict):
+        return []
+    return [rel for rel, want in sorted(files.items())
+            if (dest / rel).is_file() and sha256(dest / rel) != want]
 
 
 def herdr(*args):
@@ -236,6 +275,10 @@ def main():
             print(f"{dry}remove mods/{MOD}")
             if not a.dry_run:
                 shutil.rmtree(home / "mods" / MOD)
+        if (home / RECORD).exists():
+            print(f"{dry}remove {RECORD.as_posix()}")
+            if not a.dry_run:
+                (home / RECORD).unlink()
         print(f"Kept: any <name>-{MOD} layout the installer cloned, and trailboss's own data "
               "(~/.local/share/trailboss: the index and tracked.json).")
         return
@@ -256,11 +299,21 @@ def main():
     if a.update and not dest.exists():
         sys.exit(f"mods/{MOD} isn't installed yet: run without --update.")
     herdr("check", str(HERE / "mods" / MOD))
+    record = read_record(home) if a.update else {}
+    # Files changed by hand since the last install are kept, not copied over.
+    keep = changed_by_hand(dest, record) if a.update else []
+    if keep:
+        print(f"{dry}keep, changed since install: {', '.join(keep)}")
     print(f"{dry}copy mods/{MOD}")
+    src = HERE / "mods" / MOD
     if not a.dry_run:
+        kept = {rel: (dest / rel).read_bytes() for rel in keep}
         if dest.exists():
             shutil.rmtree(dest)
-        shutil.copytree(HERE / "mods" / MOD, dest, ignore=shutil.ignore_patterns(*GENERATED))
+        shutil.copytree(src, dest, ignore=shutil.ignore_patterns(*GENERATED))
+        for rel, data in kept.items():
+            (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+            (dest / rel).write_bytes(data)
         herdr("check", str(dest))
     # Keys a newer mod added are bound on --update too.
     bound = False
@@ -276,6 +329,18 @@ def main():
                 bound = True
     if bound and not a.dry_run:
         keys_path.write_text(json.dumps(keys, indent=2) + "\n")
+    if not a.dry_run:
+        # A kept file keeps the hash it was installed with, so doctor still says it was changed.
+        files = {rel: sha256(src / rel) for rel in mod_files(src)}
+        files.update({rel: record["files"][rel] for rel in keep})
+        # Only the keys bound to our actions: not the ones refused because the key was taken.
+        made = {}
+        for section, binds in ours.items():
+            for key, action in binds.items():
+                if keys.get(section, {}).get(key) == action:
+                    made.setdefault(section, {})[key] = action
+        (home / RECORD).parent.mkdir(parents=True, exist_ok=True)
+        (home / RECORD).write_text(json.dumps({"files": files, "keys": made}, indent=2) + "\n")
     if a.update:
         print("Updated.")
         return

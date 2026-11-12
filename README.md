@@ -15,7 +15,9 @@ The installer:
 - binds **Alt+Shift+T** to the dashboard, **Alt+Shift+I** to the Insights window and **Alt+Shift+C** to the thread pane, unless a key is already taken (then it tells you; `--update` binds keys a newer mod added);
 - adds a 320px block at the right of the current layout's status bar. If that layout is one of Herdr's own (`main`, …), which Herdr replaces on every start, it's cloned first as `<name>-trailboss` and switched to. A layout of your own is edited in place, after a backup in `~/.config/herdr-app/data/trailboss/backups/`.
 
-`--update` copies a newer mod over an install; `--uninstall` takes the block and the keys out and removes the mod.
+`--update` copies a newer mod over an install, keeping (and naming) any file you changed since; `--uninstall` takes the block and the keys out and removes the mod.
+
+The installer records what it installed in `~/.config/herdr-app/data/trailboss/install.json`: a SHA-256 of each file and the keys it bound. `trailboss doctor` checks your files and keys against it.
 
 **Installed through Herdr's package manager, or no CLI yet:** open the dashboard (`mod.open:trailboss`). It checks the CLI with `trailboss --json version` and, when it's missing or older than the mod needs, shows **Install** / **Update**: that downloads the release for your machine (Linux x86_64 or aarch64) to `~/.local/bin`, after checking its SHA-256. When the status-bar block isn't in the current layout, it offers **Add to layout**, which does what the installer does above. Both run `mods/trailboss/setup_mod.py`, which ships in the mod's folder (`install.py --get-cli` runs the same code), and only when you click.
 

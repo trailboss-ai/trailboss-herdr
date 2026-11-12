@@ -10,6 +10,7 @@ python3 install.py                  # or --update after changes
 herdr-app check mods/trailboss      # type-checks the mod
 for t in mods/trailboss/*.test.mjs mods/trailboss/*/*.test.mjs; do node "$t"; done
 python3 test_setup_mod.py
+python3 test_install.py
 ```
 
 - Pure logic goes in small node-tested modules (`cli.js`, `fleet/tree.js`, `files/diff.js`…), next to a `.test.mjs`.

@@ -19,3 +19,4 @@ jobs:
       # The mod's pure logic; diff.test applies hunk patches with real git.
       - run: for t in mods/trailboss/*.test.mjs mods/trailboss/*/*.test.mjs; do node "$t"; done
       - run: python3 test_setup_mod.py
+      - run: python3 test_install.py
