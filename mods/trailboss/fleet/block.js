@@ -134,7 +134,7 @@ export class Block {
 
   // For the spaces sidebar, only when it changed (shared state is saved to disk).
   shareNeeds(live) {
-    const now = needsByTerminal(live, this.details);
+    const now = needsByTerminal(live);
     if (JSON.stringify(now) !== JSON.stringify(shared(NEEDS_KEY) ?? {})) setShared(NEEDS_KEY, now);
   }
 

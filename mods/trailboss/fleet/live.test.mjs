@@ -8,6 +8,7 @@ assert.deepEqual(
 );
 // A turn that ended on a question needs you too.
 assert.equal(rank({ status: "idle", needs: "Should I push?", needs_kind: "reply" }), 0);
+assert.equal(rank({ status: "working", stuck: true }), 0);
 
 // Only the kind, unless details are on; an unknown kind still says it waits.
 const run = { needs: "Run: cargo test -p client", needs_kind: "run" };
@@ -27,7 +28,8 @@ const fleet = [
   { terminal: null, agent: "pi", needs: "Send it?", needs_kind: "reply" },
 ];
 assert.deepEqual(needsByTerminal(fleet), { t5: [{ agent: "codex", why: "Run a command" }] });
-assert.deepEqual(needsByTerminal(fleet, true), { t5: [{ agent: "codex", why: "Run: cargo test" }] });
+// Never the reason itself: shared state is saved to disk.
+assert.deepEqual(needsByTerminal(fleet, true), { t5: [{ agent: "codex", why: "Run a command" }] });
 
 const now = 1_790_850_000_000;
 assert.equal(ago(now - 45_000, now), "45s");

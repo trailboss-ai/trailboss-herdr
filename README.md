@@ -106,7 +106,7 @@ In the background it runs `trailboss events` every 15 s, and notifies when an ag
 
 | Tab | Shows | Click a row to |
 |---|---|---|
-| Live | every running agent: terminal, status and for how long ("blocked 12m"), cost so far, session; under it why it needs you (else its turn), its model, effort and context ("Opus 5.5 · High · 38% context", the share standing out above 80%), and its CPU and memory. Agents that need you come first, then finished, working and idle ones, pinned agents (`trailboss live --pin`) above them all. **By folder** (default) puts each folder's agents under its heading (⚠ when more than one is working), folders with the most urgent agent first, and indents agents under the agent that started them; **List** shows one row each. Lost sessions and a Resume now button | go to its terminal |
+| Live | every running agent: terminal, status and for how long ("blocked 12m"), cost so far, session; under it why it needs you (else its turn), its model, effort and context ("Opus 5.5 · High · 38% context", the share standing out above 80%), and its CPU and memory. Agents that need you (or look stuck) come first, then finished, working and idle ones, pinned agents (`trailboss live --pin`) above them all. **By folder** (default) puts each folder's agents under its heading (⚠ when more than one is working), folders with the most urgent agent first, and indents agents under the agent that started them; **List** shows one row each. Lost sessions and a Resume now button | go to its terminal |
 | Sessions | recent sessions; type to full-text search every agent's sessions | reopen that session in a new tab, in its folder |
 | Usage | cost per day for two weeks; cost per model for 30 days | |
 | Quota | plan windows, % used, reset time, pace | |

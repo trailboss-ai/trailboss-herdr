@@ -1,10 +1,10 @@
 // What a Live row says about its agent, from `trailboss live`'s fields: why it needs you,
 // its turn, model, effort, context and processes. Pure, so live.test.mjs runs it under node.
 
-// Most urgent first: an agent that needs you, then one that finished, working, at rest.
-// Anything else (a lost terminal, an unknown status) comes last.
+// Most urgent first: an agent that needs you (or looks stuck), then one that finished,
+// working, at rest. Anything else (a lost terminal, an unknown status) comes last.
 export function rank(r) {
-  if (r.status === "blocked" || r.needs) return 0;
+  if (r.status === "blocked" || r.needs || r.stuck) return 0;
   if (r.status === "done") return 1;
   if (r.status === "working" || r.status === "busy") return 2;
   if (r.status === "idle") return 3;
@@ -38,12 +38,13 @@ export function needsWords(r, details = false) {
 }
 
 // Shared state the status-bar block keeps for the spaces sidebar's tooltips: why each Herdr
-// terminal's agent needs you, { terminal: [{ agent, why }] }, `why` as needsWords() says it.
+// terminal's agent needs you, { terminal: [{ agent, why }] }. Only the kind, even with
+// details on: shared state is saved to disk, and the reason quotes the transcript.
 export const NEEDS_KEY = "trailboss.needs";
-export function needsByTerminal(live, details = false) {
+export function needsByTerminal(live) {
   const out = {};
   for (const r of live ?? []) {
-    const why = needsWords(r, details);
+    const why = needsWords(r);
     if (!why || !r.terminal || (r.host ?? "herdr") !== "herdr") continue;
     (out[r.terminal] ??= []).push({ agent: r.agent, why });
   }
