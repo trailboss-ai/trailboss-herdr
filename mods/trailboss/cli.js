@@ -2,7 +2,7 @@
 
 // The oldest CLI this mod works with, and the --json version (`trailboss --json version`'s
 // `api`) it reads. Raise `version` when the mod starts using a field a release added.
-export const NEEDS = { version: "0.4.0", api: 1 };
+export const NEEDS = { version: "0.5.0", api: 1 };
 
 // a < b, comparing 0.10.0 > 0.9.9 as numbers; a pre-release suffix (-rc1) is ignored.
 export function older(a, b) {
