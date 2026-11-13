@@ -18,7 +18,7 @@ import {
   removedText,
 } from "./send.js";
 import { openInsights } from "../usage/insights.js";
-import { ICON, cliStatus, setupStep, blockInLayout, tb, plural, money, daysAgo, short, statusColor } from "../lib.js";
+import { ICON, cliStatus, setupStep, recordInstall, blockInLayout, tb, plural, money, daysAgo, short, statusColor } from "../lib.js";
 
 // The dashboard (Alt+Shift+T, or click the status block): Live, Sessions, Usage, Quota and
 // Stats, each one Trailboss command, plus a button for the Insights window.
@@ -61,6 +61,7 @@ export class Dashboard {
     this.inLayout = true; // whether the status-bar block is in the current layout
     this.setup = null; // a setup step's progress or failure
     cx.spawn((cx) => this.start(cx));
+    cx.spawn(() => recordInstall());
     // The Live tab stays live while open.
     cx.timer.every(5000, (cx) => {
       if (this.tab === "Live") cx.spawn((cx) => this.load(cx, "Live"));

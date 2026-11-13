@@ -7,10 +7,14 @@ this folder). install.py uses the same code.
       it against SHA256SUMS; refuse one older than --min
   python3 setup_mod.py add-block [--dry-run]
       add the Trailboss block to the current layout (cloning Herdr's own layout first)
+  python3 setup_mod.py record [--dry-run]
+      write data/trailboss/install.json (what `trailboss doctor` checks the mod's files against)
+      when there's none yet, as for a mod installed by Herdr's package manager
 
 Prints one line saying what happened; exits non-zero when it didn't.
 """
 import argparse
+import fnmatch
 import hashlib
 import io
 import json
@@ -29,6 +33,11 @@ STATUS = "workspace-status"
 RELEASES = "https://github.com/trailboss-ai/trailboss/releases/latest/download"
 BLOCK = {"id": MOD, "type": "block", "content": {"mod": MOD}, "size": {"px": 320}}
 DEST = Path.home() / ".local/bin/trailboss"
+# Files Herdr writes into a mod's folder itself; not part of the mod.
+GENERATED = ("gpui-kit.d.ts", "herdr.d.ts", "jsconfig.json", "__pycache__")
+# What was installed, in Herdr's data/trailboss/: each file's SHA-256 (paths relative to the
+# mod's folder) and the keys bound, so `trailboss doctor` can tell which files were changed since.
+RECORD = Path("data") / MOD / "install.json"
 
 
 def asset(system, machine):
@@ -80,6 +89,71 @@ def get_cli(minimum=None, dry=False):
     on_path = str(DEST.parent) in os.environ.get("PATH", "").split(os.pathsep)
     print(f"Installed Trailboss {got} in {DEST.parent}"
           + ("" if on_path else f". Add {DEST.parent} to your PATH to run trailboss in a terminal."))
+
+
+def sha256(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def mod_files(root):
+    """The mod's files under root, as relative paths with /, leaving out Herdr's generated ones."""
+    out = []
+    for f in sorted(root.rglob("*")):
+        rel = f.relative_to(root)
+        if f.is_file() and not any(fnmatch.fnmatch(part, g) for part in rel.parts for g in GENERATED):
+            out.append(rel.as_posix())
+    return out
+
+
+def hashes(root):
+    """{relative path: SHA-256} for the mod's files under root."""
+    return {rel: sha256(root / rel) for rel in mod_files(root)}
+
+
+def record_json(files, keys):
+    return json.dumps({"files": files, "keys": keys}, indent=2) + "\n"
+
+
+def read_record(home):
+    try:
+        record = json.loads((home / RECORD).read_text())
+    except (OSError, ValueError):
+        return {}
+    return record if isinstance(record, dict) else {}
+
+
+def write_record(home, files, keys):
+    """Write the record, replacing any earlier one (install.py, which knows what it installed)."""
+    (home / RECORD).parent.mkdir(parents=True, exist_ok=True)
+    (home / RECORD).write_text(record_json(files, keys))
+
+
+def record_once(dry=False):
+    """Write the record for a mod installed without install.py (Herdr's package manager), when
+    there's none: never over one install.py wrote. No keys, since only install.py binds them.
+
+    It can only hash the files as they are now, so a file changed by hand before this ran
+    counts as installed that way: doctor can't tell."""
+    home = app_home()
+    mod = home / "mods" / MOD
+    if (home / RECORD).exists():
+        print("The install record is already there.")
+        return
+    if not mod.is_dir():
+        sys.exit(f"mods/{MOD} isn't installed in {home}.")
+    files = hashes(mod)
+    if dry:
+        print(f"(dry run) record {len(files)} files in {RECORD.as_posix()}")
+        return
+    (home / RECORD).parent.mkdir(parents=True, exist_ok=True)
+    try:
+        # "x": if install.py wrote one meanwhile, keep it.
+        with open(home / RECORD, "x") as f:
+            f.write(record_json(files, {}))
+    except FileExistsError:
+        print("The install record is already there.")
+        return
+    print(f"Recorded {len(files)} files in {RECORD.as_posix()} for trailboss doctor")
 
 
 def app_home():
@@ -164,13 +238,15 @@ def add_to_layout(dry=False):
 
 def main():
     ap = argparse.ArgumentParser(description="Trailboss mod setup")
-    ap.add_argument("step", choices=["get-cli", "add-block"])
+    ap.add_argument("step", choices=["get-cli", "add-block", "record"])
     ap.add_argument("--min", help="refuse a release older than this version")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     try:
         if a.step == "get-cli":
             get_cli(a.min, a.dry_run)
+        elif a.step == "record":
+            record_once(a.dry_run)
         else:
             add_to_layout(a.dry_run)
     except OSError as e:  # network and file errors: one readable line for the mod to show

@@ -17,7 +17,7 @@ The installer:
 
 `--update` copies a newer mod over an install, keeping (and naming) any file you changed since; `--uninstall` takes the block and the keys out and removes the mod.
 
-The installer records what it installed in `~/.config/herdr-app/data/trailboss/install.json`: a SHA-256 of each file and the keys it bound. `trailboss doctor` checks your files and keys against it.
+The installer records what it installed in `~/.config/herdr-app/data/trailboss/install.json`: a SHA-256 of each file and the keys it bound. `trailboss doctor` checks your files and keys against it. Installed through Herdr's package manager, the dashboard writes it (files only, no keys) the first time you open it, from the files as they are then: a file you changed before that counts as installed that way.
 
 **Installed through Herdr's package manager, or no CLI yet:** open the dashboard (`mod.open:trailboss`). It checks the CLI with `trailboss --json version` and, when it's missing or older than the mod needs, shows **Install** / **Update**: that downloads the release for your machine (Linux x86_64 or aarch64) to `~/.local/bin`, after checking its SHA-256. When the status-bar block isn't in the current layout, it offers **Add to layout**, which does what the installer does above. Both run `mods/trailboss/setup_mod.py`, which ships in the mod's folder (`install.py --get-cli` runs the same code), and only when you click.
 

@@ -62,6 +62,11 @@ with tempfile.TemporaryDirectory() as tmp:
     ours = json.loads((HERE / "keys.json").read_text())["global"]
     assert record["keys"] == {"global": {k: v for k, v in ours.items() if k != "alt-shift-i"}}, record["keys"]
 
+    # The dashboard's record step leaves the installer's record alone.
+    before = record_path.read_text()
+    r = subprocess.run([sys.executable, str(dest / "setup_mod.py"), "record"], capture_output=True, text=True, env=env)
+    assert r.returncode == 0 and record_path.read_text() == before, r
+
     # --update keeps a file changed by hand, says so, and keeps its installed hash in the record.
     (dest / "cli.js").write_text("// changed by hand\n")
     out = install("--update", "--dry-run")

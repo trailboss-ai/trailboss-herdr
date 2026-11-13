@@ -46,8 +46,9 @@ export async function blockInLayout() {
   }
 }
 
-// Runs one of setup_mod.py's steps ("get-cli", "add-block"), which ships in this folder so it
-// works however the mod was installed. Only ever on a click. { ok, message }.
+// Runs one of setup_mod.py's steps ("get-cli", "add-block", "record"), which ships in this
+// folder so it works however the mod was installed. get-cli and add-block only ever on a click.
+// { ok, message }.
 export async function setupStep(step) {
   const args = [`${appHome()}/mods/${MOD}/setup_mod.py`, step, ...(step === "get-cli" ? ["--min", NEEDS.version] : [])];
   let r;
@@ -59,6 +60,19 @@ export async function setupStep(step) {
   if (step === "get-cli") found = undefined; // look for the binary again
   const out = ((r.code === 0 ? r.stdout : r.stderr || r.stdout) || "").trim().split("\n").pop();
   return { ok: r.code === 0, message: out || (r.code === 0 ? "Done" : `${step} failed`) };
+}
+
+// The install record (data/trailboss/install.json) for `trailboss doctor`, written once per
+// Herdr start when there's none, as after a package-manager install, which never runs
+// install.py. It stays inside Herdr's folder, so it needs no click; it never replaces
+// install.py's record.
+// Tried again on the next open if it failed.
+let recording = null;
+export function recordInstall() {
+  recording ??= setupStep("record").then((r) => {
+    if (!r.ok) recording = null;
+  });
+  return recording;
 }
 
 // Runs `trailboss --json <args>` and parses its output.

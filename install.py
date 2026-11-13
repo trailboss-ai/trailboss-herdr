@@ -30,8 +30,6 @@ for `trailboss doctor`; --uninstall removes it.
 Adapted from herdr-agent-resume-plus's installer (same author, MIT).
 """
 import argparse
-import fnmatch
-import hashlib
 import json
 import os
 import shutil
@@ -41,10 +39,11 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-# Downloading the CLI and adding the block live in the mod, which runs them itself when it was
-# installed without this script (pkg installs only the mod's folder).
+# Downloading the CLI, adding the block and the install record live in the mod, which runs them
+# itself when it was installed without this script (pkg installs only the mod's folder).
 sys.path.insert(0, str(HERE / "mods" / "trailboss"))
-from setup_mod import MOD, STATUS, add_to_layout, get_cli  # noqa: E402
+from setup_mod import (GENERATED, MOD, RECORD, STATUS, add_to_layout, get_cli, hashes, read_record,  # noqa: E402
+                       sha256, write_record)
 # Both would type resume commands into the same terminals after a reboot.
 REPLACES = "agent-resume-plus"
 # Mods Trailboss replaces with its own views (docs/parity.md), and the view each block becomes.
@@ -52,32 +51,6 @@ TAKES_OVER = {"session-history": "sessions", "stats": "stats", "usage-bar": "quo
 # Icons other mods (tabs-plus) borrow from the mods being removed.
 ICONS = {"mods/stats/stats.svg": "mods/trailboss/icons/stats.svg",
          "mods/session-history/icon.svg": "mods/trailboss/icons/sessions.svg"}
-GENERATED = ("gpui-kit.d.ts", "herdr.d.ts", "jsconfig.json", "__pycache__")
-# What was installed, in Herdr's data/trailboss/: each file's SHA-256 (paths relative to the
-# mod's folder) and the keys bound, so `trailboss doctor` can tell which files were changed since.
-RECORD = Path("data") / MOD / "install.json"
-
-
-def sha256(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def mod_files(root):
-    """The mod's files under root, as relative paths with /, leaving out Herdr's generated ones."""
-    out = []
-    for f in sorted(root.rglob("*")):
-        rel = f.relative_to(root)
-        if f.is_file() and not any(fnmatch.fnmatch(part, g) for part in rel.parts for g in GENERATED):
-            out.append(rel.as_posix())
-    return out
-
-
-def read_record(home):
-    try:
-        record = json.loads((home / RECORD).read_text())
-    except (OSError, ValueError):
-        return {}
-    return record if isinstance(record, dict) else {}
 
 
 def changed_by_hand(dest, record):
@@ -331,7 +304,7 @@ def main():
         keys_path.write_text(json.dumps(keys, indent=2) + "\n")
     if not a.dry_run:
         # A kept file keeps the hash it was installed with, so doctor still says it was changed.
-        files = {rel: sha256(src / rel) for rel in mod_files(src)}
+        files = hashes(src)
         files.update({rel: record["files"][rel] for rel in keep})
         # Only the keys bound to our actions: not the ones refused because the key was taken.
         made = {}
@@ -339,8 +312,7 @@ def main():
             for key, action in binds.items():
                 if keys.get(section, {}).get(key) == action:
                     made.setdefault(section, {})[key] = action
-        (home / RECORD).parent.mkdir(parents=True, exist_ok=True)
-        (home / RECORD).write_text(json.dumps({"files": files, "keys": made}, indent=2) + "\n")
+        write_record(home, files, made)
     if a.update:
         print("Updated.")
         return
