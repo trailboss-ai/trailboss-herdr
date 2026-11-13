@@ -403,7 +403,7 @@ export class Dashboard {
     if (this.sendError) notes.push([this.sendError, t.blocked]);
     if (this.sending) notes.push([`Sending to ${plural(this.sending.size, "agent")}… checking each.`, t.dim]);
     if (this.sent) {
-      notes.push([summary(this.sent), t.muted]);
+      notes.push([summary(this.sent), t.muted, true]); // with Clear
       // Rows no Live row shows: a target that found no agent, or one that has since gone.
       byWhere(this.sent, rows).rest.forEach((r) => notes.push([`${r.where}: ${tone(r.action)[0]} · ${r.detail}`, t.dim]));
     }
@@ -442,7 +442,27 @@ export class Dashboard {
       .gap(6)
       .border_t(1)
       .border_color(t.border)
-      .children(notes.map(([text, color], i) => note(`send-note-${i}`, div().flex_1().min_w(0).truncate().child(text), color)))
+      .children(
+        notes.map(([text, color, clear], i) =>
+          note(`send-note-${i}`, div().flex_1().min_w(0).truncate().child(text), color).when(clear && !busy, (el) =>
+            el.child(
+              div()
+                .id("send-clear")
+                .flex_none()
+                .cursor_pointer()
+                .text_color(t.dim)
+                .hover((s) => s.text_color(t.foreground))
+                .tooltip("Hide these results (the checks stay)")
+                .on_click((_e, cx) => {
+                  this.sent = null;
+                  this.sentMap = null;
+                  cx.notify();
+                })
+                .child("Clear"),
+            ),
+          ),
+        ),
+      )
       // Queued for an agent Live doesn't show (gone, or its session changed): typed only into that session.
       .children(
         queuedElsewhere(this.rows.Queue, rows).map((q, i) => this.queuedLine(t, q, `send-q-${i}`, note, `${q.where ?? "?"}: `)),
