@@ -795,8 +795,13 @@ export class Dashboard {
               .text_color(t.muted)
               .hover((s) => s.bg(t.hover).text_color(t.foreground))
               .on_click(() => {
-                openInsights();
-                closeOverlay(this.overlay);
+                // Closing the dashboard right after it opens Insights strands Insights' first
+                // CLI call (it never returns). The status-bar block outlives us, so ask it to open
+                // the window, as Alt+Shift+I does; without one, open it here and stay open.
+                if (this.inLayout) {
+                  run("trailboss.insights");
+                  closeOverlay(this.overlay);
+                } else openInsights();
               })
               .child("Insights ↗"),
           )
