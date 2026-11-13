@@ -17,6 +17,7 @@ import {
   summary,
   removedText,
 } from "./send.js";
+import { sweepParent, sweepGroups, sweepCounts, heading, stateTone, nextTone, prBadge, firstLine, terminalFor } from "./sweep.js";
 import { openInsights } from "../usage/insights.js";
 import { ICON, cliStatus, setupStep, recordInstall, blockInLayout, tb, plural, money, daysAgo, short, statusColor } from "../lib.js";
 
@@ -57,6 +58,9 @@ export class Dashboard {
     this.sent = null; // its rows
     this.sentMap = null; // those rows by `where`, for the Live rows that show them
     this.sendError = null;
+    // Live's Sweep panel: { parent, where, data, loading, error } for one row's session, or null.
+    this.sweep = null;
+    this.sweepN = 0; // which `sweep` call is the latest, so an older one's answer is dropped
     this.cli = null; // cliStatus() while the CLI is missing or too old
     this.inLayout = true; // whether the status-bar block is in the current layout
     this.setup = null; // a setup step's progress or failure
@@ -291,8 +295,139 @@ export class Dashboard {
                 ),
             ),
           )
-          .when(Boolean(load), (el) => el.child(div().flex_none().w(110).child(load))),
+          .when(Boolean(load), (el) => el.child(div().flex_none().w(110).child(load)))
+          .when(Boolean(sweepParent(r)), (el) => el.child(this.sweepToggle(t, r, i))),
       );
+  }
+
+  // ---------------------------------------------------------------- Live's Sweep panel
+
+  // "Sweep ▸" on a Live row: opens, under it, what was started from its session.
+  sweepToggle(t, r, i) {
+    const open = this.sweep?.parent === sweepParent(r);
+    return div()
+      .id(`sweep-toggle-${i}`)
+      .flex_none()
+      .cursor_pointer()
+      .text_color(open ? t.foreground : t.dim)
+      .hover((s) => s.text_color(t.foreground))
+      .tooltip("What was started from this session, and what's next (trailboss sweep)")
+      .on_click((_e, cx) => {
+        cx.stop_propagation(); // not the row's click, which focuses its terminal
+        if (open) this.sweep = null;
+        else {
+          this.sweep = { parent: sweepParent(r), where: r.where, data: null, loading: false, error: null };
+          cx.spawn((cx) => this.loadSweep(cx));
+        }
+        cx.notify();
+      })
+      .child(open ? "Sweep ▾" : "Sweep ▸");
+  }
+
+  // `sweep --parent` asks GitHub for PRs and CI and can take seconds: it runs on its own, so
+  // Live keeps refreshing meanwhile, and the last result stays up until the new one is in.
+  async loadSweep(cx) {
+    const sw = this.sweep;
+    if (!sw || !this.bin) return;
+    const n = ++this.sweepN;
+    sw.loading = true;
+    cx.notify();
+    try {
+      const data = await tb(["sweep", "--parent", sw.parent]);
+      if (n !== this.sweepN) return;
+      sw.data = data;
+      sw.error = null;
+    } catch (e) {
+      if (n !== this.sweepN) return;
+      sw.error = String(e?.message ?? e);
+    } finally {
+      if (n === this.sweepN) sw.loading = false;
+    }
+    cx.notify();
+  }
+
+  // The panel: grouped by what's next (your decisions first), each row's state, PR and CI,
+  // and the first line of what it last said; click one to go to its terminal.
+  sweepPanel(t, live) {
+    const sw = this.sweep;
+    const groups = sweepGroups(sw.data);
+    const counts = sweepCounts(groups);
+    const small = (id) => h_flex().id(id).px(10).text_size(11.5);
+    const link = (id, label, tip, click) =>
+      div()
+        .id(id)
+        .flex_none()
+        .cursor_pointer()
+        .text_color(t.dim)
+        .hover((s) => s.text_color(t.foreground))
+        .tooltip(tip)
+        .on_click(click)
+        .child(label);
+    const out = [
+      small("sweep-head")
+        .pt(4)
+        .pb(4)
+        .gap(10)
+        .items_center()
+        .child(div().flex_none().font_semibold().child("Started from here"))
+        .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(counts))
+        .child(
+          sw.loading
+            ? div().flex_none().text_color(t.dim).child("Sweeping…")
+            : link("sweep-refresh", "↻ Refresh", `trailboss sweep --parent ${sw.parent}`, (_e, cx) => cx.spawn((cx) => this.loadSweep(cx))),
+        )
+        .child(
+          link("sweep-close", "✕", "Close the sweep", (_e, cx) => {
+            this.sweep = null;
+            this.sweepN++;
+            cx.notify();
+          }),
+        ),
+    ];
+    if (sw.error) out.push(small("sweep-err").pb(4).text_color(t.blocked).child(sw.error));
+    if (sw.loading && !sw.data) out.push(small("sweep-wait").pb(4).text_color(t.dim).child("Asking GitHub for PRs and CI… this can take a few seconds."));
+    if (sw.data && !sw.data.rows?.length) out.push(small("sweep-none").pb(4).text_color(t.dim).child("Nothing was started from this session."));
+    groups.forEach((g, gi) => {
+      out.push(small(`sweep-g-${gi}`).pt(4).text_size(11).text_color(t.dim).child(`${heading(g.kind)} (${g.rows.length})`));
+      g.rows.forEach(({ row, next }, j) => {
+        const id = `sweep-${gi}-${j}`;
+        const badge = prBadge(row.pr);
+        const term = terminalFor(row, live);
+        const indent = row.depth ? `${"   ".repeat(row.depth - 1)}└ ` : "";
+        out.push(
+          v_flex()
+            .id(id)
+            .rounded(5)
+            .when(Boolean(term), (el) =>
+              el
+                .cursor_pointer()
+                .hover((s) => s.bg(t.hover))
+                .on_click(() => {
+                  run("pane.focus", { terminal: term });
+                  closeOverlay(this.overlay);
+                }),
+            )
+            .child(
+              this.line(t, `${id}-top`, [
+                [`${indent}${row.name ?? row.where ?? row.session ?? "?"}`, 236],
+                [row.state, 80, t[stateTone(row.state)] ?? t.muted],
+                [badge?.text ?? "", 150, badge ? (t[badge.tone] ?? t.muted) : t.dim],
+                [firstLine(row.said), null, t.muted],
+              ]),
+            )
+            .child(
+              h_flex()
+                .px(10)
+                .pb(4)
+                .text_size(11)
+                .text_color(next ? (t[nextTone(next.kind)] ?? t.dim) : t.dim)
+                .child(div().flex_1().min_w(0).truncate().child(`${"   ".repeat(row.depth ?? 0)}${next?.text ?? row.detail ?? ""}`)),
+            ),
+        );
+      });
+    });
+    (sw.data?.notes ?? []).forEach((text, i) => out.push(small(`sweep-note-${i}`).pt(2).text_color(t.dim).child(text)));
+    return v_flex().id("sweep").ml(30).mr(10).mt(2).mb(8).py(4).rounded(6).border_1().border_color(t.border).bg(t.background).children(out);
   }
 
   // ---------------------------------------------------------------- Live's send bar
@@ -549,7 +684,12 @@ export class Dashboard {
           return;
         }
         out.push(this.pickable(t, r, i, this.liveRow(t, r, depth, tree, i)), ...this.sendNotes(t, r, i));
+        if (this.sweep && sweepParent(r) === this.sweep.parent) out.push(this.sweepPanel(t, rows));
       });
+      // Its agent has left Live since: the panel stays, after the list.
+      if (this.sweep && !rows.some((r) => sweepParent(r) === this.sweep.parent)) {
+        out.push(this.note(t, `Sweep of ${this.sweep.where ?? this.sweep.parent}, no longer running:`), this.sweepPanel(t, rows));
+      }
       if (!rows.length && this.rows.Live) out.push(this.note(t, "No agents running."));
       const lost = this.rows.Lost ?? [];
       if (lost.length) {

@@ -114,6 +114,8 @@ In the background it runs `trailboss events` every 15 s, and notifies when an ag
 
 **Sending from Live:** check agents' rows, type a message in the bar at the bottom and click **Send** (`trailboss send --yes`): it's typed only where the agent is idle and in front, and never over a draft in its input. Each row says "checking…" for a moment, then what happened: **sent** (it started a turn), **held** (it holds it until its turn ends), **no reaction**, or **skipped** and why. The results stay until the next send or **Clear**; the checks stay too. **Queue** (`send --queue --yes`) does the same, but an agent mid-turn gets the message once that turn ends. Queued messages show under their agent's row with **Take back** (`trailboss queue rm`). They're typed only while something looks at the agents: the block does while it runs, as do `trailboss watch` and `trailboss events`. The bar says when nothing is looking.
 
+**Sweep:** a Live row's **Sweep ▸** opens, under it, the agents and tasks started from that session (`trailboss sweep --parent`): your decisions first, then what's waiting, each with its state, PR and CI, and the first line of what it last said. Click one to go to its terminal. It asks GitHub through `gh`, so it can take a few seconds; Live keeps refreshing meanwhile, and **↻ Refresh** asks again.
+
 ## Notes
 
 - The block has to stay in your layout: it's what keeps tracking sessions and resumes them after a reboot.
