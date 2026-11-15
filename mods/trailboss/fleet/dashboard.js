@@ -20,6 +20,8 @@ import {
   finishedLine,
 } from "./send.js";
 import { sweepParent, hasSweep, sweepGroups, sweepCounts, heading, stateTone, nextTone, prBadge, firstLine, terminalFor } from "./sweep.js";
+import { sweepReport, notedTasks, sameTarget } from "./report.js";
+import { newReport, reportStep, reportCard } from "./reportcard.js";
 import { openInsights } from "../usage/insights.js";
 import { ICON, cliStatus, setupStep, recordInstall, blockInLayout, tb, plural, money, daysAgo, short, statusColor } from "../lib.js";
 
@@ -67,7 +69,8 @@ export class Dashboard {
     this.sent = null; // its rows
     this.sentMap = null; // those rows by `where`, for the Live rows that show them
     this.sendError = null;
-    // Live's Sweep panel: { parent, where, data, loading, error } for one row's session, or null.
+    // Live's Sweep panel: { parent, where, data, loading, error, noted, report } for one row's
+    // session, or null. `noted`: the tasks with review notes; `report`: an open Report back card.
     this.sweep = null;
     this.sweepN = 0; // which `sweep` call is the latest, so an older one's answer is dropped
     this.pinning = null; // the `where` of the row being pinned or unpinned
@@ -393,8 +396,11 @@ export class Dashboard {
     cx.notify();
     try {
       const data = await tb(["sweep", "--parent", sw.parent]);
+      // Which of its tasks have review notes to report back (`task ls`), only when it has tasks.
+      const tasks = data?.rows?.some((r) => r.kind === "task") ? await tb(["task", "ls"]).catch(() => null) : null;
       if (n !== this.sweepN) return;
       sw.data = data;
+      sw.noted = notedTasks(tasks);
       sw.error = null;
     } catch (e) {
       if (n !== this.sweepN) return;
@@ -453,6 +459,7 @@ export class Dashboard {
         const badge = prBadge(row.pr);
         const term = terminalFor(row, live);
         const indent = row.depth ? `${"   ".repeat(row.depth - 1)}└ ` : "";
+        const report = sweepReport(row, sw.noted);
         out.push(
           v_flex()
             .id(id)
@@ -480,13 +487,46 @@ export class Dashboard {
                 .pb(4)
                 .text_size(11)
                 .text_color(next ? (t[nextTone(next.kind)] ?? t.dim) : t.dim)
-                .child(div().flex_1().min_w(0).truncate().child(`${"   ".repeat(row.depth ?? 0)}${next?.text ?? row.detail ?? ""}`)),
+                .child(div().flex_1().min_w(0).truncate().child(`${"   ".repeat(row.depth ?? 0)}${next?.text ?? row.detail ?? ""}`))
+                .when(Boolean(report), (el) =>
+                  el.child(
+                    link(`${id}-report`, "↩ Report back", report?.kind === "task" ? "Queue the task's latest review notes for its agent" : "Queue its last reply for the session it was started from", (_e, cx) => {
+                      cx.stop_propagation();
+                      this.openReport(cx, sw, report);
+                    }),
+                  ),
+                ),
             ),
         );
+        if (report && sameTarget(sw.report?.target, report)) out.push(this.sweepReportCard(t, sw));
       });
     });
     (sw.data?.notes ?? []).forEach((text, i) => out.push(small(`sweep-note-${i}`).pt(2).text_color(t.dim).child(text)));
     return v_flex().id("sweep").ml(30).mr(10).mt(2).mb(8).py(4).rounded(6).border_1().border_color(t.border).bg(t.background).children(out);
+  }
+
+  // Report back from a Sweep row: the plan first, in a card under the row.
+  openReport(cx, sw, target) {
+    const card = newReport(target);
+    sw.report = card;
+    cx.spawn((cx) => reportStep(card, false, () => cx.notify()));
+  }
+
+  // Send queues it; Live then shows it under the target's row, as other queued messages.
+  sweepReportCard(t, sw) {
+    const card = sw.report;
+    return reportCard(t, card, {
+      id: "sweep-report",
+      send: (_e, cx) =>
+        cx.spawn(async (cx) => {
+          const r = await reportStep(card, true, () => cx.notify());
+          if (r.row) await this.load(cx, "Live");
+        }),
+      close: (_e, cx) => {
+        if (sw.report === card) sw.report = null;
+        cx.notify();
+      },
+    });
   }
 
   // ---------------------------------------------------------------- Live's send bar

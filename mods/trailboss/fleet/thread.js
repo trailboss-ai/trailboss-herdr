@@ -5,6 +5,8 @@ import { tb, tbRun, err, ICON, money, compact, duration, longDate, short, status
 import { quote, matching, day, lines, codeBlocks } from "./turns.js";
 import { treeLines, treeCounts, nodeAction } from "./threadtree.js";
 import { askable, branchArgs, readBranch, planText } from "./branch.js";
+import { treeReport } from "./report.js";
+import { newReport, reportStep, reportCard } from "./reportcard.js";
 
 // A pane beside an agent's terminal with only the conversation: each prompt and its reply,
 // newest first, a band per day. Search, open a turn, copy or quote its reply (or one of its
@@ -13,7 +15,8 @@ import { askable, branchArgs, readBranch, planText } from "./branch.js";
 // session among the ones forked, started or run as subagents around it; with a CLI that has
 // no tree it stays hidden. "Branch from here" on a turn of the session asks a side question in
 // a fork of it as of that turn (`trailboss branch`): the plan first, then Start runs it with
-// --yes.
+// --yes. "Report back" on a branch's first turn (a fork or a session it started) shows what
+// `trailboss report` would queue for the session it came from; Send queues it.
 
 const ALIVE = "trailboss.threads"; // terminal → when its pane last ticked
 const AGENT_TURNS = "trailboss.thread.agent"; // show messages the agent sent itself (task reports)
@@ -50,6 +53,7 @@ export class Thread {
     this.search = InputState.new({ placeholder: "Search prompts and replies…" });
     this.search.on("change", (_e, cx) => cx.notify());
     this.branching = null; // the open card: { turn, plan, planFor, error, busy }
+    this.reporting = null; // the open Report back card (reportcard.js)
     this.question = InputState.new({ placeholder: "Your side question (two words at least)…" });
     this.question.on("change", (_e, cx) => cx.notify());
     this.question.on("submit", (_e, cx) => this.branchGo(cx));
@@ -75,7 +79,7 @@ export class Thread {
       if (find || !this.session) {
         const live = await tb(["live"]);
         const row = live.find((r) => r.host === "herdr" && r.terminal === this.terminal);
-        if (row?.session && row.session !== this.session?.session) this.branching = null; // its turns are another session's
+        if (row?.session && row.session !== this.session?.session) this.branching = this.reporting = null; // its turns are another session's
         if (row?.session) this.session = row;
       }
       if (!this.session) throw new Error("No agent session in this terminal yet.");
@@ -113,6 +117,12 @@ export class Thread {
     this.treeLoading = false;
     if (!this.tree && this.view === "tree") this.view = "turns";
     cx.notify();
+  }
+
+  openReport(cx, target) {
+    const card = newReport(target);
+    this.reporting = card;
+    cx.spawn((cx) => reportStep(card, false, () => cx.notify()));
   }
 
   openBranch(cx, turn) {
@@ -243,6 +253,20 @@ export class Thread {
       )
       .when(Boolean(this.error), (el) => el.child(div().p(12).text_size(12).text_color(t.muted).child(this.error)))
       .when(Boolean(this.branching), (el) => el.child(this.branchCard(t, this.branching)))
+      .when(Boolean(this.reporting), (el) =>
+        el.child(
+          reportCard(t, this.reporting, {
+            send: (_e, cx) => {
+              const card = this.reporting;
+              cx.spawn((cx) => reportStep(card, true, () => cx.notify()));
+            },
+            close: (_e, cx) => {
+              this.reporting = null;
+              cx.notify();
+            },
+          }),
+        ),
+      )
       .child(tree ? this.treeView(t, tree) : turn ? this.detail(t, turn) : this.list(t));
   }
 
@@ -252,6 +276,7 @@ export class Thread {
     const mine = tree.focus ?? this.key(); // the CLI names the pane's session as it knows it
     const rows = treeLines(tree, mine).map((l, i) => {
       const act = nodeAction(l.node, tree, mine);
+      const report = treeReport(l.node, mine);
       return h_flex()
         .id(`node-${i}`)
         .mx(8)
@@ -298,6 +323,25 @@ export class Thread {
                 this.openBranch(cx, l.node.turn);
               })
               .child("⑂"),
+          ),
+        )
+        .when(Boolean(report), (el) =>
+          el.child(
+            div()
+              .id(`rp-${i}`)
+              .flex_none()
+              .px(4)
+              .rounded(4)
+              .text_size(11)
+              .text_color(t.dim)
+              .cursor_pointer()
+              .hover((x) => x.bg(t.hover).text_color(t.foreground))
+              .tooltip("Report back: queue this branch's last reply for the session it came from")
+              .on_click((_e, cx) => {
+                cx.stop_propagation();
+                this.openReport(cx, report);
+              })
+              .child("↩"),
           ),
         );
     });

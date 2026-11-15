@@ -22,7 +22,11 @@ export function branchArgs(session, turn, question, yes = false, name = null) {
 /** What a `trailboss --json branch` run said, from its { code, stdout, stderr }:
  *  { row } (the plan, or what started), or { error } with the CLI's own words (a refusal: an agent it can't fork, a turn it can't
  *  branch from, …). The JSON on stdout is read whatever the exit code. */
-export function readBranch(r) {
+export const readBranch = (r) => readRow(r, "branch");
+
+/** The same for any command that prints one row (`branch`, `report`, `task report`); `what`
+ *  names it in the error when the CLI said nothing. */
+export function readRow(r, what) {
   const out = (r?.stdout ?? "").trim();
   if (out.startsWith("[")) {
     try {
@@ -32,7 +36,7 @@ export function readBranch(r) {
   }
   const text = `${r?.stderr ?? ""}\n${out.startsWith("[") ? "" : out}`.trim();
   const line = text.split("\n").map((s) => s.trim()).find((s) => s && !/^(Usage|For more information)/.test(s));
-  return { error: (line ?? "").replace(/^(trailboss|error):\s*/, "") || `trailboss branch failed (exit ${r?.code ?? "?"})` };
+  return { error: (line ?? "").replace(/^(trailboss|error):\s*/, "") || `trailboss ${what} failed (exit ${r?.code ?? "?"})` };
 }
 
 // The card's lines for a plan or a start: what it does and the command it runs.
