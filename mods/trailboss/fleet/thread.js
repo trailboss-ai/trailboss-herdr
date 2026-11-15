@@ -225,11 +225,15 @@ export class Thread {
     const hidden = (this.turns ?? []).filter((x) => x.from === "agent").length;
     const rows = [];
     let band = null;
-    for (const x of shown) {
-      const d = day(x.ts);
+    // Turns per day, counted once: a long session has thousands, and this runs on every render.
+    const days = shown.map((x) => day(x.ts));
+    const perDay = new Map();
+    for (const d of days) perDay.set(d, (perDay.get(d) ?? 0) + 1);
+    for (const [i, x] of shown.entries()) {
+      const d = days[i];
       if (d !== band) {
         band = d;
-        const n = shown.filter((y) => day(y.ts) === d).length;
+        const n = perDay.get(d);
         rows.push(div().px(12).pt(10).pb(4).text_size(11).text_color(t.dim).child(`${longDate(d)} · ${n} ${n === 1 ? "turn" : "turns"}`));
       }
       rows.push(this.row(t, x));

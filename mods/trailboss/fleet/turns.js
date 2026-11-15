@@ -24,9 +24,20 @@ export function day(iso) {
 export const plain = (l) =>
   l.replace(/^```.*$/, "").replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/(\*\*|__|`)/g, "").replace(/^(#+|>)\s*/, "");
 
-// The first `n` non-empty lines of a text, as plain text, each cut short.
-export const lines = (text, n, width = 200) =>
-  (text ?? "").split("\n").map((l) => plain(l.trim()).trim()).filter(Boolean).slice(0, n).map((l) => (l.length > width ? `${l.slice(0, width - 1)}…` : l));
+// The first `n` non-empty lines of a text, as plain text, each cut short. It stops at the
+// n-th: rows call it on every render, and a reply can run to thousands of lines.
+export function lines(text, n, width = 200) {
+  const out = [];
+  const s = text ?? "";
+  for (let at = 0; out.length < n && at <= s.length; ) {
+    let end = s.indexOf("\n", at);
+    if (end < 0) end = s.length;
+    const l = plain(s.slice(at, end).trim()).trim();
+    if (l) out.push(l.length > width ? `${l.slice(0, width - 1)}…` : l);
+    at = end + 1;
+  }
+  return out;
+}
 
 // The fenced code blocks in a reply, for their copy buttons.
 export const codeBlocks = (md) => [...(md ?? "").matchAll(/^```[^\n]*\n([\s\S]*?)^```/gm)].map((m) => m[1].replace(/\n$/, ""));

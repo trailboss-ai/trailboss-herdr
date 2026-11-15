@@ -17,6 +17,15 @@ assert.equal(day(null), "");
 
 assert.deepEqual(lines("  a\n\n b \nc\nd", 2), ["a", "b"]);
 assert.deepEqual(lines("x".repeat(5), 1, 4), ["xxx…"]);
+assert.deepEqual(lines(null, 2), []);
+assert.deepEqual(lines("a\n", 3), ["a"]);
+{
+  // A long reply: only the lines it keeps are cleaned up, so a row stays cheap to draw.
+  const big = "first\nsecond\n" + "**word** `code` [l](u)\n".repeat(200000);
+  const t0 = Date.now();
+  for (let i = 0; i < 1000; i++) assert.deepEqual(lines(big, 2), ["first", "second"]);
+  assert.ok(Date.now() - t0 < 1000, "lines stops at the n-th line");
+}
 assert.deepEqual(lines("I created **[GEN-1](https://x/1)**: `ok`\n```sh\n- **Cycle:** 7", 3), ["I created GEN-1: ok", "- Cycle: 7"]);
 
 assert.deepEqual(codeBlocks("Run:\n```sh\ncargo test\n```\nand\n```\nls\n```\n"), ["cargo test", "ls"]);
