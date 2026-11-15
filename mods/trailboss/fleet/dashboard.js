@@ -23,6 +23,7 @@ import { sweepParent, hasSweep, sweepGroups, sweepCounts, heading, stateTone, ne
 import { sweepReport, notedTasks, needsTaskLs, sameTarget } from "./report.js";
 import { newReport, reportStep, reportCard } from "./reportcard.js";
 import { unreadBadge, branchBadge, branchTip, seenOnFocus, markUnreadArgs, wantsRecap, recapKey, recapArgs, readRecap, recapTip } from "./unread.js";
+import { LS_ARGS, loopsByRow, untilChip, untilTip, untilActions } from "./until.js";
 import { openInsights } from "../usage/insights.js";
 import { ICON, cliStatus, setupStep, recordInstall, blockInLayout, tb, plural, money, daysAgo, short, statusColor } from "../lib.js";
 
@@ -79,6 +80,8 @@ export class Dashboard {
     this.sweepN = 0; // which `sweep` call is the latest, so an older one's answer is dropped
     this.pinning = null; // the `where` of the row being pinned or unpinned
     this.marking = null; // the `where` of the row being marked unread
+    this.looping = null; // the id of the `until` loop being paused, resumed or stopped
+    this.loops = new Map(); // each Live row's running `until` loop, matched once per refresh
     this.recapping = false; // a round of recap calls is out
     this.cli = null; // cliStatus() while the CLI is missing or too old
     this.inLayout = true; // whether the status-bar block is in the current layout
@@ -154,6 +157,8 @@ export class Dashboard {
         this.rows.Lost = await tb(["resume", "--dry-run"]);
         // Queued messages are an extra: Live still shows if `queue` fails.
         this.rows.Queue = await tb(["queue"]).catch(() => this.rows.Queue ?? []);
+        // So are `until` loops: one `until ls` for every row; a CLI without it shows none.
+        this.loops = loopsByRow(this.rows.Live, await tb(LS_ARGS).catch(() => []));
       } else if (tab === "Sessions") {
         // An empty box lists recent sessions; words search them, best hit per session.
         const q = this.input.value().trim();
@@ -271,6 +276,7 @@ export class Dashboard {
     const unread = unreadBadge(r);
     const branches = branchBadge(r);
     const recap = wantsRecap(r, now) ? recaps.get(recapKey(r)) : null;
+    const loop = this.loops.get(r);
     // Only Herdr's own terminals can be focused from here.
     const focus = r.terminal && (r.host ?? "herdr") === "herdr" ? (_e, cx) => cx.spawn(() => this.focus(r.terminal, r)) : null;
     return v_flex()
@@ -307,6 +313,7 @@ export class Dashboard {
           )
           .when(Boolean(unread), (el) => el.child(this.badge(t, `unread-${i}`, unread, "Finished turns you haven't seen")))
           .when(Boolean(branches), (el) => el.child(this.badge(t, `branches-${i}`, branches, branchTip(r))))
+          .when(Boolean(loop), (el) => el.children(this.untilLoop(t, loop, i, now)))
           .when(runs.length > 0, (el) =>
             el.child(
               h_flex()
@@ -407,6 +414,45 @@ export class Dashboard {
     } finally {
       this.recapping = false;
     }
+  }
+
+  // A running `until` loop on its row: "until: round 2 · failing · $0.84" (the check and its
+  // minutes on hover), then Pause, Resume or Stop, each only on a click.
+  untilLoop(t, l, i, now) {
+    const [text, tone] = untilChip(l);
+    const busy = this.looping === l.id;
+    return [
+      div().id(`until-${i}`).flex_none().text_color(t[tone] ?? t.muted).tooltip(untilTip(l, now)).child(text),
+      ...untilActions(l).map(([label, args, tip]) =>
+        div()
+          .id(`until-${i}-${label}`)
+          .flex_none()
+          .cursor_pointer()
+          .text_color(t.dim)
+          .hover((s) => s.text_color(t.foreground))
+          .tooltip(tip)
+          .on_click((_e, cx) => {
+            cx.stop_propagation(); // not the row's click, which focuses its terminal
+            if (this.looping == null) cx.spawn((cx) => this.untilDo(cx, l.id, label, args));
+          })
+          .child(busy ? "…" : label),
+      ),
+    ];
+  }
+
+  // Runs `until pause|resume|stop <id>`, then reloads Live to show what the loop says now.
+  async untilDo(cx, id, label, args) {
+    this.looping = id;
+    cx.notify();
+    try {
+      await tb(args);
+    } catch (e) {
+      notify({ title: `Couldn't ${label.toLowerCase()} the until loop`, body: String(e?.message ?? e), level: "error" });
+    }
+    while (this.loading.Live) await new Promise((r) => cx.timer.after(100, () => r()));
+    await this.load(cx, "Live");
+    this.looping = null;
+    cx.notify();
   }
 
   // "Pin" / "Unpin" on a Live row: pinned agents come first (`trailboss live --pin`).
