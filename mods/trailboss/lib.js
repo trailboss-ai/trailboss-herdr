@@ -75,6 +75,14 @@ export function recordInstall() {
   return recording;
 }
 
+// Runs `trailboss --json <args>` and gives back { code, stdout, stderr } as is, for a command
+// whose output is read whatever its exit code (`branch`).
+export async function tbRun(args) {
+  const bin = await findBin();
+  if (!bin) throw new Error(MISSING);
+  return exec(bin, ["--json", ...args]);
+}
+
 // Runs `trailboss --json <args>` and parses its output.
 export async function tb(args) {
   const bin = await findBin();

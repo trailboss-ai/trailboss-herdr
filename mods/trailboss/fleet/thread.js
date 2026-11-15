@@ -1,16 +1,19 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextView } from "gpui-base";
-import { theme, run, focused, panes, notify, shared, setShared } from "herdr";
-import { tb, err, money, compact, duration, longDate, short, statusColor } from "../lib.js";
+import { theme, run, focused, panes, notify, shared, setShared, settings } from "herdr";
+import { tb, tbRun, err, ICON, money, compact, duration, longDate, short, statusColor } from "../lib.js";
 import { quote, matching, day, lines, codeBlocks } from "./turns.js";
 import { treeLines, treeCounts, nodeAction } from "./threadtree.js";
+import { askable, branchArgs, readBranch, planText } from "./branch.js";
 
 // A pane beside an agent's terminal with only the conversation: each prompt and its reply,
 // newest first, a band per day. Search, open a turn, copy or quote its reply (or one of its
 // code blocks). Reads `trailboss thread`, so the agent's files are only ever read; quoting
 // pastes into the terminal and never presses Enter. The Tree view (`thread --tree`) shows the
 // session among the ones forked, started or run as subagents around it; with a CLI that has
-// no tree it stays hidden.
+// no tree it stays hidden. "Branch from here" on a turn of the session asks a side question in
+// a fork of it as of that turn (`trailboss branch`): the plan first, then Start runs it with
+// --yes. With a CLI that has no `branch` the control stays hidden.
 
 const ALIVE = "trailboss.threads"; // terminal → when its pane last ticked
 const AGENT_TURNS = "trailboss.thread.agent"; // show messages the agent sent itself (task reports)
@@ -46,6 +49,11 @@ export class Thread {
     this.treeLoading = false;
     this.search = InputState.new({ placeholder: "Search prompts and replies…" });
     this.search.on("change", (_e, cx) => cx.notify());
+    this.canBranch = null; // whether the CLI has `branch`: found once per pane, null until known
+    this.branching = null; // the open card: { turn, plan, planFor, error, busy }
+    this.question = InputState.new({ placeholder: "Your side question (two words at least)…" });
+    this.question.on("change", (_e, cx) => cx.notify());
+    this.question.on("submit", (_e, cx) => this.branchGo(cx));
     cx.spawn((cx) => this.load(cx, true));
     cx.timer.every(TICK, (cx) => this.tick(cx));
   }
@@ -68,12 +76,14 @@ export class Thread {
       if (find || !this.session) {
         const live = await tb(["live"]);
         const row = live.find((r) => r.host === "herdr" && r.terminal === this.terminal);
+        if (row?.session && row.session !== this.session?.session) this.branching = null; // its turns are another session's
         if (row?.session) this.session = row;
       }
       if (!this.session) throw new Error("No agent session in this terminal yet.");
       this.turns = await tb(["thread", this.key()]);
       this.error = null;
       cx.spawn((cx) => this.loadTree(cx));
+      if (this.canBranch == null) cx.spawn((cx) => this.checkBranch(cx));
     } catch (e) {
       this.error = err(e);
     }
@@ -105,6 +115,106 @@ export class Thread {
     this.treeLoading = false;
     if (!this.tree && this.view === "tree") this.view = "turns";
     cx.notify();
+  }
+
+  // Whether the CLI has `branch`, once: a plan (nothing starts without --yes) that a CLI from
+  // before it fails as an unknown subcommand. A refusal for this session still means it has it.
+  async checkBranch(cx) {
+    const key = this.key();
+    if (!key || this.canBranch != null || this.checkingBranch) return;
+    this.checkingBranch = true;
+    try {
+      this.canBranch = !readBranch(await tbRun(["branch", key])).unsupported;
+    } catch {}
+    this.checkingBranch = false;
+    cx.notify();
+  }
+
+  openBranch(cx, turn) {
+    this.branching = { turn, plan: null, planFor: null, error: null, busy: false };
+    this.question.set_value("");
+    this.question.focus();
+    cx.notify();
+  }
+
+  // The card's main button: the plan for the question as typed, then, once shown, Start.
+  branchGo(cx) {
+    const b = this.branching;
+    const q = this.question.value().trim();
+    if (!b || b.busy || !askable(q)) return;
+    cx.spawn((cx) => this.branch(cx, b, q, b.plan && b.planFor === q));
+  }
+
+  async branch(cx, b, q, yes) {
+    const key = this.key();
+    b.busy = true;
+    b.error = null;
+    cx.notify();
+    let r;
+    try {
+      r = readBranch(await tbRun(branchArgs(key, b.turn, q, yes)));
+    } catch (e) {
+      r = { error: err(e) };
+    }
+    b.busy = false;
+    if (r.unsupported) {
+      this.canBranch = false;
+      this.branching = null;
+    } else if (r.error) {
+      b.error = r.error;
+      b.plan = null;
+    } else if (yes) {
+      if (this.branching === b) this.branching = null;
+      notify({ title: `Branched from #${b.turn}`, body: planText(r.row).detail, level: "success", icon: ICON });
+      cx.spawn((cx) => this.loadTree(cx));
+    } else {
+      b.plan = r.row;
+      b.planFor = q;
+    }
+    cx.notify();
+  }
+
+  // The inline card: the question, the plan for it (what it does, the command), Start / Cancel.
+  branchCard(t, b) {
+    const q = this.question.value().trim();
+    const ready = Boolean(b.plan) && b.planFor === q;
+    const ok = askable(q) && !b.busy;
+    const { detail, command } = ready ? planText(b.plan) : { detail: "", command: "" };
+    const go = b.busy ? (ready ? "Starting…" : "Checking…") : ready ? "Start" : "Preview";
+    return v_flex()
+      .id("branch")
+      .flex_none()
+      .m(8)
+      .p(10)
+      .gap(6)
+      .rounded(6)
+      .bg(t.surface)
+      .border_1()
+      .border_color(t.border)
+      .child(div().text_size(11.5).font_semibold().child(`⑂ Branch from #${b.turn}: ask a side question in a fork, as of this turn`))
+      .child(Input.new(this.question).h(28).px(8).rounded(5).border_1().border_color(t.input).bg(t.background).text_size(12))
+      .when(Boolean(detail), (el) => el.child(div().text_size(11.5).text_color(t.muted).child(detail)))
+      .when(Boolean(command), (el) => el.child(div().p(6).rounded(4).bg(t.background).text_size(11).font_family(settings().font_family ?? "monospace").text_color(t.dim).child(command)))
+      .when(Boolean(b.error), (el) => el.child(div().text_size(11.5).text_color(t.blocked).child(b.error)))
+      .child(
+        h_flex()
+          .gap(6)
+          .child(
+            div()
+              .id("b-branch-go")
+              .px(8)
+              .py(2)
+              .rounded(4)
+              .text_size(11.5)
+              .bg(t.solid)
+              .text_color(t.solid_foreground)
+              .when(!ok, (el) => el.opacity(0.5))
+              .when(ok, (el) => el.cursor_pointer().hover((s) => s.opacity(0.85)).on_click((_e, cx) => this.branchGo(cx)))
+              .child(go),
+          )
+          .child(this.button(t, "branch-cancel", "Cancel", () => (this.branching = null)))
+          .when(!ready && ok, (el) => el.child(div().text_size(11).text_color(t.dim).child("Preview shows what Start runs; nothing starts until Start."))),
+      );
   }
 
   copy(cx, text, what) {
@@ -150,6 +260,7 @@ export class Thread {
           .child(this.button(t, "close", "×", () => run("pane.close"))),
       )
       .when(Boolean(this.error), (el) => el.child(div().p(12).text_size(12).text_color(t.muted).child(this.error)))
+      .when(Boolean(this.branching), (el) => el.child(this.branchCard(t, this.branching)))
       .child(tree ? this.treeView(t, tree) : turn ? this.detail(t, turn) : this.list(t));
   }
 
@@ -157,6 +268,7 @@ export class Thread {
   // session stands out. A turn of this session opens it; another session's focuses its terminal.
   treeView(t, tree) {
     const mine = tree.focus ?? this.key(); // the CLI names the pane's session as it knows it
+    const branch = this.canBranch === true;
     const rows = treeLines(tree, mine).map((l, i) => {
       const act = nodeAction(l.node, tree, mine);
       return h_flex()
@@ -187,7 +299,26 @@ export class Thread {
         )
         .when(Boolean(l.marker), (el) => el.child(div().flex_none().text_size(11).text_color(t.accent).child(l.marker)))
         .child(div().flex_1().min_w(0).truncate().text_color(l.mine ? t.foreground : t.muted).when(l.mine, (x) => x.font_semibold()).child(l.label))
-        .when(Boolean(l.state), (el) => el.child(div().flex_none().text_size(11).text_color(statusColor(t, l.state)).child(l.state)));
+        .when(Boolean(l.state), (el) => el.child(div().flex_none().text_size(11).text_color(statusColor(t, l.state)).child(l.state)))
+        .when(branch && l.mine && l.node.turn != null, (el) =>
+          el.child(
+            div()
+              .id(`br-${i}`)
+              .flex_none()
+              .px(4)
+              .rounded(4)
+              .text_size(11)
+              .text_color(t.dim)
+              .cursor_pointer()
+              .hover((x) => x.bg(t.hover).text_color(t.foreground))
+              .tooltip("Branch from here: a side question in a fork, as of this turn")
+              .on_click((_e, cx) => {
+                cx.stop_propagation();
+                this.openBranch(cx, l.node.turn);
+              })
+              .child("⑂"),
+          ),
+        );
     });
     return v_flex()
       .id("tree")
@@ -322,6 +453,7 @@ export class Thread {
           .child(this.button(t, "copy", this.copied === "reply" ? "Copied" : "Copy reply", (cx) => this.copy(cx, x.reply, "reply")))
           .child(this.button(t, "quote", "Quote into the prompt", (cx) => this.quote(cx, x.reply)))
           .child(this.button(t, "copy-prompt", this.copied === "prompt" ? "Copied" : "Copy prompt", (cx) => this.copy(cx, x.prompt, "prompt")))
+          .when(this.canBranch === true, (el) => el.child(this.button(t, "branch-open", "⑂ Branch from here", (cx) => this.openBranch(cx, x.n))))
           .children(blocks.map((b, i) => this.button(t, `code-${i}`, this.copied === `code-${i}` ? "Copied" : `Copy code ${blocks.length > 1 ? i + 1 : ""}`.trim() + ` (${short(b.split("\n")[0], 24)})`, (cx) => this.copy(cx, b, `code-${i}`)))),
       );
   }
