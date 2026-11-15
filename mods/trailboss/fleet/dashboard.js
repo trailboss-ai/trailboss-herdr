@@ -20,7 +20,7 @@ import {
   finishedLine,
 } from "./send.js";
 import { sweepParent, hasSweep, sweepGroups, sweepCounts, heading, stateTone, nextTone, prBadge, firstLine, terminalFor } from "./sweep.js";
-import { sweepReport, notedTasks, sameTarget } from "./report.js";
+import { sweepReport, notedTasks, needsTaskLs, sameTarget } from "./report.js";
 import { newReport, reportStep, reportCard } from "./reportcard.js";
 import { openInsights } from "../usage/insights.js";
 import { ICON, cliStatus, setupStep, recordInstall, blockInLayout, tb, plural, money, daysAgo, short, statusColor } from "../lib.js";
@@ -396,8 +396,9 @@ export class Dashboard {
     cx.notify();
     try {
       const data = await tb(["sweep", "--parent", sw.parent]);
-      // Which of its tasks have review notes to report back (`task ls`), only when it has tasks.
-      const tasks = data?.rows?.some((r) => r.kind === "task") ? await tb(["task", "ls"]).catch(() => null) : null;
+      // Which of its tasks have review notes to report back: sweep's rows say so themselves,
+      // else (an older CLI) `task ls` does, asked only when there are tasks.
+      const tasks = needsTaskLs(data?.rows) ? await tb(["task", "ls"]).catch(() => null) : null;
       if (n !== this.sweepN) return;
       sw.data = data;
       sw.noted = notedTasks(tasks);

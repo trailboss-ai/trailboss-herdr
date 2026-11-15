@@ -12,6 +12,7 @@ import {
   treeReport,
   notedTasks,
   sweepReport,
+  needsTaskLs,
   sameTarget,
 } from "./report.js";
 
@@ -106,6 +107,18 @@ assert.deepEqual(sweepReport({ kind: "task", n: 3, session: "claude:cccc" }, not
 assert.equal(sweepReport({ kind: "task", n: 4, session: "claude:dddd" }, noted), null);
 assert.equal(sweepReport({ kind: "task", n: 3, session: "claude:cccc" }, null), null);
 assert.equal(sweepReport({ kind: "later", n: null, session: "claude:eeee" }, noted), null);
+
+// A sweep whose task rows carry `notes` (and `notes_current`): those win over `task ls`, and
+// notes for an older commit aren't offered (the CLI would refuse them).
+assert.deepEqual(sweepReport({ kind: "task", n: 6, notes: true, notes_current: true }, null), taskTarget(6));
+assert.deepEqual(sweepReport({ kind: "task", n: 6, notes: true }, null), taskTarget(6)); // not said: as `task ls`
+assert.equal(sweepReport({ kind: "task", n: 6, notes: true, notes_current: false }, null), null);
+assert.equal(sweepReport({ kind: "task", n: 3, notes: false, notes_current: false }, noted), null);
+const agentRow = { kind: "agent", session: "claude:bbbb" };
+assert.equal(needsTaskLs([agentRow, { kind: "task", n: 6, notes: true, notes_current: true }, { kind: "task", n: 7, notes: false }]), false);
+assert.equal(needsTaskLs([agentRow, { kind: "task", n: 6 }]), true); // an older CLI
+assert.equal(needsTaskLs([agentRow]), false); // no tasks: nothing to ask
+assert.equal(needsTaskLs(null), false);
 
 assert.equal(sameTarget(B, branchTarget("claude:bbbb")), true);
 assert.equal(sameTarget(B, branchTarget("claude:cccc")), false);

@@ -55,11 +55,19 @@ export function notedTasks(tasks) {
   return new Set((Array.isArray(tasks) ? tasks : []).filter((x) => x?.notes && x.n != null).map((x) => x.n));
 }
 
-// A Sweep row's target: an agent with a session, or a task with review notes (`noted`).
+// Whether sweep's task rows say themselves whether they have review notes (`notes`, and
+// `notes_current`: they're for the branch's latest commit). A CLI whose rows don't needs
+// `task ls` for it: true when some task row lacks the field.
+export const needsTaskLs = (rows) => (rows ?? []).some((r) => r?.kind === "task" && typeof r.notes !== "boolean");
+
+// A Sweep row's target: an agent with a session, or a task with review notes. From the row's
+// own `notes` when it has them (and only when they're current, so the CLI won't refuse them),
+// else from `noted` (`task ls`'s).
 export function sweepReport(row, noted) {
   if (row?.kind === "agent") return branchTarget(row.session);
-  if (row?.kind === "task" && noted?.has(row.n)) return taskTarget(row.n);
-  return null;
+  if (row?.kind !== "task") return null;
+  const has = typeof row.notes === "boolean" ? row.notes && row.notes_current !== false : Boolean(noted?.has(row.n));
+  return has ? taskTarget(row.n) : null;
 }
 
 // The same target, for matching an open card to its row.
