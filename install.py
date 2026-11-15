@@ -42,8 +42,8 @@ HERE = Path(__file__).resolve().parent
 # Downloading the CLI, adding the block and the install record live in the mod, which runs them
 # itself when it was installed without this script (pkg installs only the mod's folder).
 sys.path.insert(0, str(HERE / "mods" / "trailboss"))
-from setup_mod import (GENERATED, MOD, RECORD, STATUS, add_to_layout, get_cli, hashes, read_record,  # noqa: E402
-                       sha256, write_record)
+from setup_mod import (GENERATED, MOD, RECORD, STATUS, add_to_layout, get_cli, hashes, mod_version,  # noqa: E402
+                       read_record, sha256, write_record)
 # Both would type resume commands into the same terminals after a reboot.
 REPLACES = "agent-resume-plus"
 # Mods Trailboss replaces with its own views (docs/parity.md), and the view each block becomes.
@@ -312,7 +312,7 @@ def main():
             for key, action in binds.items():
                 if keys.get(section, {}).get(key) == action:
                     made.setdefault(section, {})[key] = action
-        write_record(home, files, made)
+        write_record(home, files, made, mod_version(src))
     if a.update:
         print("Updated.")
         return

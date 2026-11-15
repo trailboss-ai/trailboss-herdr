@@ -15,6 +15,7 @@ python3 test_install.py
 
 - Pure logic goes in small node-tested modules (`cli.js`, `fleet/tree.js`, `files/diff.js`…), next to a `.test.mjs`.
 - Read only fields the specification describes. A feature that needs a new field starts with the specification and the CLI; the mod then raises `NEEDS` in `mods/trailboss/cli.js` to the CLI version that has it.
+- A change to the mod's files raises `version` in `mods/trailboss/mod.json`, so that after a package-manager update the dashboard records the new files for `trailboss doctor` (it never rewrites the record for the same version).
 - Nothing is downloaded or written outside Herdr's own folders except on a user's click.
 - Never commit real transcripts or session data.
 

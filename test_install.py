@@ -48,6 +48,11 @@ with tempfile.TemporaryDirectory() as tmp:
     install()
     record = json.loads(record_path.read_text())
     files = record["files"]
+    # The mod's version, so the mod's own record step leaves this record alone.
+    assert record["version"] == json.loads((SRC / "mod.json").read_text())["version"], record.get("version")
+    before = record_path.read_text()
+    r = subprocess.run([sys.executable, str(dest / "setup_mod.py"), "record"], capture_output=True, text=True, env=env)
+    assert r.returncode == 0 and "already there" in r.stdout and record_path.read_text() == before, r
     # Every installed file, relative to the mod's folder, with the SHA-256 of its bytes.
     assert "cli.js" in files and "icons/stats.svg" in files, sorted(files)
     for rel, want in files.items():

@@ -9,7 +9,8 @@ this folder). install.py uses the same code.
       add the Trailboss block to the current layout (cloning Herdr's own layout first)
   python3 setup_mod.py record [--dry-run]
       write data/trailboss/install.json (what `trailboss doctor` checks the mod's files against)
-      when there's none yet, as for a mod installed by Herdr's package manager
+      when there's none yet, or rewrite it when the mod's version (mod.json) isn't the one
+      recorded, as for a mod installed or updated by Herdr's package manager
 
 Prints one line saying what happened; exits non-zero when it didn't.
 """
@@ -35,8 +36,9 @@ BLOCK = {"id": MOD, "type": "block", "content": {"mod": MOD}, "size": {"px": 320
 DEST = Path.home() / ".local/bin/trailboss"
 # Files Herdr writes into a mod's folder itself; not part of the mod.
 GENERATED = ("gpui-kit.d.ts", "herdr.d.ts", "jsconfig.json", "__pycache__")
-# What was installed, in Herdr's data/trailboss/: each file's SHA-256 (paths relative to the
-# mod's folder) and the keys bound, so `trailboss doctor` can tell which files were changed since.
+# What was installed, in Herdr's data/trailboss/: the mod's version, each file's SHA-256 (paths
+# relative to the mod's folder) and the keys bound, so `trailboss doctor` can tell which files
+# were changed since.
 RECORD = Path("data") / MOD / "install.json"
 
 
@@ -110,8 +112,18 @@ def hashes(root):
     return {rel: sha256(root / rel) for rel in mod_files(root)}
 
 
-def record_json(files, keys):
-    return json.dumps({"files": files, "keys": keys}, indent=2) + "\n"
+def mod_version(root):
+    """The version in the mod's mod.json, or None when it has none."""
+    try:
+        v = json.loads((root / "mod.json").read_text()).get("version")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return v if isinstance(v, str) and v else None
+
+
+def record_json(files, keys, version=None):
+    record = {"version": version} if version else {}
+    return json.dumps({**record, "files": files, "keys": keys}, indent=2) + "\n"
 
 
 def read_record(home):
@@ -122,38 +134,52 @@ def read_record(home):
     return record if isinstance(record, dict) else {}
 
 
-def write_record(home, files, keys):
+def write_record(home, files, keys, version=None):
     """Write the record, replacing any earlier one (install.py, which knows what it installed)."""
     (home / RECORD).parent.mkdir(parents=True, exist_ok=True)
-    (home / RECORD).write_text(record_json(files, keys))
+    (home / RECORD).write_text(record_json(files, keys, version))
 
 
 def record_once(dry=False):
-    """Write the record for a mod installed without install.py (Herdr's package manager), when
-    there's none: never over one install.py wrote. No keys, since only install.py binds them.
+    """Write the record for a mod installed without install.py (Herdr's package manager): when
+    there's none, or when the installed mod's version isn't the one recorded (the package manager
+    updated it). Never over a record for the same version, which would hide files changed by hand
+    since. Keys come from the record it replaces: only install.py binds them.
 
     It can only hash the files as they are now, so a file changed by hand before this ran
     counts as installed that way: doctor can't tell."""
     home = app_home()
     mod = home / "mods" / MOD
-    if (home / RECORD).exists():
-        print("The install record is already there.")
-        return
     if not mod.is_dir():
         sys.exit(f"mods/{MOD} isn't installed in {home}.")
-    files = hashes(mod)
-    if dry:
-        print(f"(dry run) record {len(files)} files in {RECORD.as_posix()}")
-        return
-    (home / RECORD).parent.mkdir(parents=True, exist_ok=True)
-    try:
-        # "x": if install.py wrote one meanwhile, keep it.
-        with open(home / RECORD, "x") as f:
-            f.write(record_json(files, {}))
-    except FileExistsError:
+    version = mod_version(mod)
+    path = home / RECORD
+    old = read_record(home) if path.exists() else None
+    # A mod without a version can't say it was updated: keep what's there.
+    if old is not None and (version is None or old.get("version") == version):
         print("The install record is already there.")
         return
-    print(f"Recorded {len(files)} files in {RECORD.as_posix()} for trailboss doctor")
+    files = hashes(mod)
+    keys = old.get("keys") if old is not None and isinstance(old.get("keys"), dict) else {}
+    if dry:
+        verb = "record" if old is None else f"rewrite the record for {version} with"
+        print(f"(dry run) {verb} {len(files)} files in {RECORD.as_posix()}")
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if old is None:
+        try:
+            # "x": if install.py wrote one meanwhile, keep it.
+            with open(path, "x") as f:
+                f.write(record_json(files, {}, version))
+        except FileExistsError:
+            print("The install record is already there.")
+            return
+        print(f"Recorded {len(files)} files in {RECORD.as_posix()} for trailboss doctor")
+        return
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(record_json(files, keys, version))
+    os.replace(tmp, path)
+    print(f"Recorded {len(files)} files of {version} in {RECORD.as_posix()} for trailboss doctor")
 
 
 def app_home():

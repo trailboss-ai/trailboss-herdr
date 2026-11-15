@@ -64,8 +64,9 @@ export async function setupStep(step) {
 
 // The install record (data/trailboss/install.json) for `trailboss doctor`, written once per
 // Herdr start when there's none, as after a package-manager install, which never runs
-// install.py. It stays inside Herdr's folder, so it needs no click; it never replaces
-// install.py's record.
+// install.py, or rewritten when the package manager updated the mod to another version. It
+// stays inside Herdr's folder, so it needs no click; it never replaces a record for the same
+// version.
 // Tried again on the next open if it failed.
 let recording = null;
 export function recordInstall() {
