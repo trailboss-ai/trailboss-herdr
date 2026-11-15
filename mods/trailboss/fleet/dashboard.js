@@ -16,6 +16,8 @@ import {
   NOTHING_LOOKING,
   summary,
   removedText,
+  finishedFor,
+  finishedLine,
 } from "./send.js";
 import { sweepParent, hasSweep, sweepGroups, sweepCounts, heading, stateTone, nextTone, prBadge, firstLine, terminalFor } from "./sweep.js";
 import { openInsights } from "../usage/insights.js";
@@ -530,6 +532,12 @@ export class Dashboard {
       out.push(small(`sent-${i}`, div().truncate().child(res.detail ? `${label} · ${res.detail}` : label), t[c] ?? t.muted));
     }
     queuedFor(this.rows.Queue, r).forEach((q, j) => out.push(this.queuedLine(t, q, `q-${i}-${j}`, small)));
+    // What came of its queued messages in the last 5 minutes; hover for what the look found.
+    const now = Date.now();
+    finishedFor(this.rows.Queue, r, now).forEach((q, j) => {
+      const [text, c] = finishedLine(q, now);
+      out.push(small(`qd-${i}-${j}`, div().truncate().child(text), t[c] ?? t.muted).when(Boolean(q.detail), (el) => el.tooltip(q.detail)));
+    });
     return out;
   }
 

@@ -1,6 +1,8 @@
 // The Live tab's send bar and queued messages: who a row can be sent to, the `send` and
 // `queue` arguments, and how their results read. Pure, so send.test.mjs runs it under node.
 
+import { ago } from "./live.js";
+
 // `send --to` for a `live` row: herdr:t3, tmux:work:2.1; null when it has no terminal to type into.
 export function target(row) {
   if (!row?.agent || !row.terminal) return null;
@@ -51,12 +53,55 @@ export function byWhere(results, liveRows) {
 // Whether a `queue` message is still waiting to be typed (finished ones have at_ms).
 export const pending = (q) => q.at_ms == null;
 
-/** The pending queued messages for a `live` row, oldest first: the same session when both
- * know it (a message is only typed into the session it was queued for), else the same place. */
+// Whether a `queue` message is a `live` row's: the same session when both know it (a
+// message is only typed into the session it was queued for), else the same place.
+export const belongs = (q, row) => (q.session && row.session ? q.session === row.session : q.where === row.where);
+
+/** The pending queued messages for a `live` row, oldest first. */
 export function queuedFor(queue, row) {
-  return (queue ?? []).filter(
-    (q) => pending(q) && (q.session && row.session ? q.session === row.session : q.where === row.where),
-  );
+  return (queue ?? []).filter((q) => pending(q) && belongs(q, row));
+}
+
+// How long a finished queued message stays under its row, and may still be notified.
+export const FINISHED_FOR_MS = 5 * 60_000;
+const recent = (q, now) => q.at_ms != null && now - q.at_ms < FINISHED_FOR_MS;
+
+// What came of a queued message that wants a look: held, no reaction, or unknown (the
+// delivery stopped before saying). Any other finished state (sent, or one this mod doesn't
+// know) doesn't.
+const ASK = new Set(["held", "no reaction", "unknown"]);
+export const wantsLook = (q) => q.at_ms != null && ASK.has(q.state);
+
+/** A `live` row's queued messages that finished in the last 5 minutes, oldest first. */
+export function finishedFor(queue, row, now = Date.now()) {
+  return (queue ?? []).filter((q) => recent(q, now) && belongs(q, row));
+}
+
+// One finished message: ["held q4 · 2m ago", tone]; sent stays dim, the ones that want a look
+// take blocked's color, a state this mod doesn't know shows as is.
+export function finishedLine(q, now = Date.now()) {
+  const a = ago(q.at_ms, now);
+  const text = `${tone(q.state)[0]} ${q.id}${a ? ` · ${a} ago` : ""}`;
+  return [text, q.state === "sent" ? "dim" : wantsLook(q) ? "blocked" : "muted"];
+}
+
+// Notification keys: an id may come back once its message has left the list.
+const key = (q) => `${q.id}@${q.at_ms}`;
+
+/** The finished messages to notify about: the ones that want a look, finished in the last 5
+ * minutes (not old ones from before Herdr started), not notified yet. `notified` is what was
+ * (shared state); it comes back with the new ones, keeping only messages `queue` still lists. */
+export function toAnnounce(queue, notified, now = Date.now()) {
+  const before = new Set(notified ?? []);
+  const fresh = (queue ?? []).filter((q) => wantsLook(q) && recent(q, now) && !before.has(key(q)));
+  const listed = new Set((queue ?? []).filter((q) => q.at_ms != null).map(key));
+  return { fresh, notified: [...[...before].filter((k) => listed.has(k)), ...fresh.map(key)] };
+}
+
+// The notification for one: { title, body }.
+export function announceText(q) {
+  const who = [q.agent, q.where].filter(Boolean).join(" ");
+  return { title: `Queued message ${q.id}${who ? ` to ${who}` : ""}: ${tone(q.state)[0]}`, body: q.detail ?? "" };
 }
 
 /** Pending messages no Live row shows (their agent has gone, or its session changed). */

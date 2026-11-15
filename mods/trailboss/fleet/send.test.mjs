@@ -11,6 +11,13 @@ import {
   nothingLooking,
   summary,
   removedText,
+  belongs,
+  finishedFor,
+  finishedLine,
+  wantsLook,
+  toAnnounce,
+  announceText,
+  FINISHED_FOR_MS,
 } from "./send.js";
 
 assert.equal(target({ agent: "claude", host: "herdr", terminal: "t3" }), "herdr:t3");
@@ -69,5 +76,47 @@ assert.equal(nothingLooking([{ ...queue[2], nothing_looking: true }], []), false
 assert.deepEqual(removedText([{ id: "q4", where: "t2 shop", action: "removed" }], "q4"), { title: "Took back q4", level: "success" });
 assert.equal(removedText([{ id: "q4", where: "t2 shop", action: "typing" }], "q4").level, "info");
 assert.equal(removedText([{ id: "q9", where: null, action: "not found" }], "q9").title, "q9 is no longer queued");
+
+// Finished ones: under their row for 5 minutes after at_ms.
+const at = 1792999400000;
+const done = [
+  { id: "q3", where: "t3 api", agent: "claude", session: "5d1e-synthetic", state: "sent", detail: "was idle; started a turn", message: null, at_ms: at },
+  { id: "q6", where: "t3 api", agent: "claude", session: "5d1e-synthetic", state: "held", detail: "not typed yet: your draft is in the input", message: null, at_ms: at + 60_000 },
+  { id: "q7", where: "t2 shop", agent: "codex", session: "0c6f2a5e-synthetic", state: "no reaction", detail: "typed; nothing happened", message: null, at_ms: at },
+  { id: "q8", where: "t3 api", agent: "claude", session: "5d1e-synthetic", state: "unknown", detail: "the delivery stopped", message: null, at_ms: at - 2 * FINISHED_FOR_MS },
+];
+const all = [...queue.filter((q) => q.at_ms == null), ...done];
+assert.equal(belongs(done[0], live[1]), true);
+assert.equal(belongs(done[0], live[0]), false);
+assert.deepEqual(finishedFor(all, live[1], at + 2 * 60_000).map((q) => q.id), ["q3", "q6"]); // q8 is too old
+assert.deepEqual(finishedFor(all, live[1], at + FINISHED_FOR_MS).map((q) => q.id), ["q6"]);
+assert.deepEqual(finishedFor(all, live[0], at + 60_000).map((q) => q.id), ["q7"]);
+assert.deepEqual(finishedFor(all, live[2], at), []);
+
+assert.deepEqual(finishedLine(done[0], at + 2 * 60_000), ["sent q3 · 2m ago", "dim"]);
+assert.deepEqual(finishedLine(done[1], at + 2 * 60_000), ["held q6 · 1m ago", "blocked"]);
+assert.deepEqual(finishedLine(done[2], at), ["no reaction q7 · 0s ago", "blocked"]);
+assert.deepEqual(finishedLine({ ...done[0], state: "bounced" }, at), ["bounced q3 · 0s ago", "muted"]); // shown as is
+assert.deepEqual(
+  ["sent", "held", "no reaction", "unknown", "bounced"].map((state) => wantsLook({ state, at_ms: at })),
+  [false, true, true, true, false],
+);
+assert.equal(wantsLook({ state: "held", at_ms: null }), false);
+
+// Notified once each, only while recent; kept only while `queue` lists them.
+let n = toAnnounce(all, [], at + 60_000);
+assert.deepEqual(n.fresh.map((q) => q.id), ["q6", "q7"]); // q3 was sent, q8 is old
+assert.deepEqual(n.notified, ["q6@1792999460000", "q7@1792999400000"]);
+n = toAnnounce(all, n.notified, at + 90_000);
+assert.deepEqual(n.fresh, []);
+assert.deepEqual(n.notified, ["q6@1792999460000", "q7@1792999400000"]);
+// q7 has left the list; an id used again later is a new message.
+n = toAnnounce([done[1], { ...done[2], id: "q6", at_ms: at + 120_000 }], n.notified, at + 150_000);
+assert.deepEqual(n.fresh.map((q) => q.at_ms), [at + 120_000]);
+assert.deepEqual(n.notified, ["q6@1792999460000", "q6@1792999520000"]);
+assert.deepEqual(toAnnounce(null, null, at), { fresh: [], notified: [] });
+
+assert.deepEqual(announceText(done[1]), { title: "Queued message q6 to claude t3 api: held", body: "not typed yet: your draft is in the input" });
+assert.equal(announceText({ ...done[2], agent: null, where: null }).title, "Queued message q7: no reaction");
 
 console.log("send: ok");

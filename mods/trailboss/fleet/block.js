@@ -5,6 +5,7 @@ import { MOD, ICON, cliStatus, setupStep, tb, plural, money, ymd, short } from "
 import { quotaRows } from "../usage/quota.js";
 import { toWarn, warning } from "../usage/pace.js";
 import { needsWords, detailsOn, needsByTerminal, NEEDS_KEY } from "./live.js";
+import { toAnnounce, announceText, belongs } from "./send.js";
 
 // The status-bar block: agents running, working / blocked, today's cost and the Claude
 // 5-hour window. It keeps `trailboss` tracking which session runs in which terminal (every
@@ -15,6 +16,8 @@ const POLL_MS = 15000;
 const TODAY_EVERY = 4; // polls between cost refreshes (~1 min)
 const QUOTA_EVERY = 20; // polls between quota checks (~5 min): those go to the network
 const WARNED = "trailboss.quota.warned";
+// Finished queued messages already notified (shared state, so once each across restarts).
+const QUEUE_NOTIFIED = "trailboss.queue.notified";
 
 // Trailboss's config file (`~/.config/trailboss/config.json`, or the platform's config folder,
 // where the CLI keeps it), or
@@ -138,6 +141,25 @@ export class Block {
     if (JSON.stringify(now) !== JSON.stringify(shared(NEEDS_KEY) ?? {})) setShared(NEEDS_KEY, now);
   }
 
+  // Once per queued message that finished held, with no reaction, or unknown: someone who
+  // queued it and walked away learns it didn't go in. Click to go to its agent's terminal.
+  async announceQueue(live) {
+    const queue = await tb(["queue"]).catch(() => null);
+    if (!queue) return;
+    const before = shared(QUEUE_NOTIFIED) ?? [];
+    const { fresh, notified } = toAnnounce(queue, before, Date.now());
+    if (JSON.stringify(notified) !== JSON.stringify(before)) setShared(QUEUE_NOTIFIED, notified);
+    for (const q of fresh) {
+      const row = (live ?? []).find((r) => r.terminal && (r.host ?? "herdr") === "herdr" && belongs(q, r));
+      notify({
+        ...announceText(q),
+        level: "warning",
+        icon: ICON,
+        ...(row ? { action: { name: "pane.focus", args: { terminal: row.terminal } } } : {}),
+      });
+    }
+  }
+
   // Once per plan window that's on pace to run out before it resets.
   warnPace() {
     const { warn, warned } = toWarn(this.quota, shared(WARNED), Date.now() / 1000);
@@ -156,6 +178,7 @@ export class Block {
       this.live = live;
       this.announce(events);
       this.shareNeeds(live);
+      await this.announceQueue(live);
       if (this.polls % TODAY_EVERY === 0) {
         const u = await tb(["usage", "--by", "all", "--since", ymd(new Date())]);
         this.today = u[0]?.cost_usd ?? 0;
