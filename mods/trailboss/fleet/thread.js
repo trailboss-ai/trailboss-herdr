@@ -1,13 +1,16 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextView } from "gpui-base";
 import { theme, run, focused, panes, notify, shared, setShared } from "herdr";
-import { tb, err, money, compact, duration, longDate, short } from "../lib.js";
+import { tb, err, money, compact, duration, longDate, short, statusColor } from "../lib.js";
 import { quote, matching, day, lines, codeBlocks } from "./turns.js";
+import { treeLines, treeCounts, nodeAction } from "./threadtree.js";
 
 // A pane beside an agent's terminal with only the conversation: each prompt and its reply,
 // newest first, a band per day. Search, open a turn, copy or quote its reply (or one of its
 // code blocks). Reads `trailboss thread`, so the agent's files are only ever read; quoting
-// pastes into the terminal and never presses Enter.
+// pastes into the terminal and never presses Enter. The Tree view (`thread --tree`) shows the
+// session among the ones forked, started or run as subagents around it; with a CLI that has
+// no tree it stays hidden.
 
 const ALIVE = "trailboss.threads"; // terminal → when its pane last ticked
 const AGENT_TURNS = "trailboss.thread.agent"; // show messages the agent sent itself (task reports)
@@ -37,6 +40,10 @@ export class Thread {
     this.copied = null;
     this.status = undefined;
     this.loaded = 0;
+    this.view = "turns"; // or "tree"
+    this.tree = null; // `thread --tree` for this session; null while there's none (or no CLI support)
+    this.treeFor = null; // the AGENT:ID the tree is for
+    this.treeLoading = false;
     this.search = InputState.new({ placeholder: "Search prompts and replies…" });
     this.search.on("change", (_e, cx) => cx.notify());
     cx.spawn((cx) => this.load(cx, true));
@@ -64,13 +71,39 @@ export class Thread {
         if (row?.session) this.session = row;
       }
       if (!this.session) throw new Error("No agent session in this terminal yet.");
-      this.turns = await tb(["thread", `${this.session.agent}:${this.session.session}`]);
+      this.turns = await tb(["thread", this.key()]);
       this.error = null;
+      cx.spawn((cx) => this.loadTree(cx));
     } catch (e) {
       this.error = err(e);
     }
     this.loaded = Date.now();
     this.loading = false;
+    cx.notify();
+  }
+
+  key() {
+    return this.session ? `${this.session.agent}:${this.session.session}` : null;
+  }
+
+  // The tree around the session, on its own so a slow or failing call never holds up the
+  // conversation. A CLI without `--tree` fails it: the Tree view then stays hidden.
+  async loadTree(cx) {
+    const key = this.key();
+    if (!key || this.treeLoading) return;
+    if (this.treeFor !== key) this.tree = null; // a new session (after /clear)
+    this.treeLoading = true;
+    try {
+      const data = await tb(["thread", key, "--tree"]);
+      if (this.key() === key && Array.isArray(data?.nodes)) {
+        this.tree = data;
+        this.treeFor = key;
+      }
+    } catch {
+      if (this.treeFor !== key) this.tree = null;
+    }
+    this.treeLoading = false;
+    if (!this.tree && this.view === "tree") this.view = "turns";
     cx.notify();
   }
 
@@ -91,7 +124,8 @@ export class Thread {
   render() {
     const t = theme();
     const s = this.session;
-    const turn = this.open != null ? this.turns?.find((x) => x.n === this.open) : null;
+    const tree = this.view === "tree" && this.tree ? this.tree : null;
+    const turn = !tree && this.open != null ? this.turns?.find((x) => x.n === this.open) : null;
     return v_flex()
       .id("root")
       .size_full()
@@ -109,11 +143,61 @@ export class Thread {
           .border_color(t.border)
           .when(Boolean(turn), (el) => el.child(this.button(t, "back", "‹ All", () => (this.open = null))))
           .child(div().flex_1().min_w(0).truncate().text_size(12.5).font_semibold().child(s ? `${s.agent} · ${s.title ?? s.session}` : "Thread"))
-          .child(div().flex_none().text_size(11).text_color(t.dim).child(this.turns ? `${this.turns.length} turns` : ""))
+          .child(div().flex_none().text_size(11).text_color(t.dim).child(tree ? treeCounts(tree) : this.turns ? `${this.turns.length} turns` : ""))
+          .when(Boolean(this.tree), (el) =>
+            el.child(this.button(t, "view", tree ? "Turns" : "Tree", () => (this.view = tree ? "turns" : "tree")).tooltip(tree ? "Back to the conversation" : "This session among its forks, subagents and the sessions it started")),
+          )
           .child(this.button(t, "close", "×", () => run("pane.close"))),
       )
       .when(Boolean(this.error), (el) => el.child(div().p(12).text_size(12).text_color(t.muted).child(this.error)))
-      .child(turn ? this.detail(t, turn) : this.list(t));
+      .child(tree ? this.treeView(t, tree) : turn ? this.detail(t, turn) : this.list(t));
+  }
+
+  // One line per turn, branches indented under the turn they come from; the pane's own
+  // session stands out. A turn of this session opens it; another session's focuses its terminal.
+  treeView(t, tree) {
+    const mine = tree.focus ?? this.key(); // the CLI names the pane's session as it knows it
+    const rows = treeLines(tree, mine).map((l, i) => {
+      const act = nodeAction(l.node, tree, mine);
+      return h_flex()
+        .id(`node-${i}`)
+        .mx(8)
+        .px(8)
+        .py(3)
+        .pl(8 + l.depth * 16)
+        .gap(6)
+        .items_center()
+        .rounded(5)
+        .text_size(12)
+        .when(l.mine, (el) => el.bg(t.surface))
+        .when(Boolean(act), (el) =>
+          el
+            .cursor_pointer()
+            .hover((s) => s.bg(t.hover))
+            .on_click((_e, cx) => {
+              if (act.terminal) {
+                run("pane.focus", { terminal: act.terminal });
+                return;
+              }
+              if (this.turns?.some((x) => x.n === act.turn)) this.open = act.turn;
+              this.view = "turns";
+              this.copied = null;
+              cx.notify();
+            }),
+        )
+        .when(Boolean(l.marker), (el) => el.child(div().flex_none().text_size(11).text_color(t.accent).child(l.marker)))
+        .child(div().flex_1().min_w(0).truncate().text_color(l.mine ? t.foreground : t.muted).when(l.mine, (x) => x.font_semibold()).child(l.label))
+        .when(Boolean(l.state), (el) => el.child(div().flex_none().text_size(11).text_color(statusColor(t, l.state)).child(l.state)));
+    });
+    return v_flex()
+      .id("tree")
+      .flex_1()
+      .min_h(0)
+      .overflow_y_scrollbar()
+      .py(8)
+      .gap(1)
+      .children(rows)
+      .when(!rows.length, (el) => el.child(div().p(12).text_size(12).text_color(t.dim).child("No turns yet.")));
   }
 
   button(t, id, label, act) {
