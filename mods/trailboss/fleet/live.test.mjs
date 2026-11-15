@@ -1,6 +1,6 @@
 // node mods/trailboss/fleet/live.test.mjs
 import assert from "node:assert/strict";
-import { rank, needsWords, needsByTerminal, detailsOn, ago, statusFor, modelName, effortName, contextText, modelParts, turnText, resources, loadParts, backgroundText, backgroundTip, quietText } from "./live.js";
+import { rank, needsWords, needsByTerminal, detailsOn, ago, statusFor, modelName, effortName, contextText, modelParts, turnText, resources, loadParts, backgroundText, backgroundTip, quietText, pinArgs, unpinArgs } from "./live.js";
 
 assert.deepEqual(
   ["blocked", "done", "working", "busy", "idle", "lost", undefined].map((status) => rank({ status })),
@@ -95,5 +95,15 @@ assert.deepEqual(quietText({ stuck: true, quiet_min: 12 }), ["stuck 12m", "block
 assert.deepEqual(quietText({ stuck: false, quiet_busy: true, quiet_min: 15 }), ["busy 15m", "working"]);
 assert.deepEqual(quietText({ quiet_busy: true, quiet_min: null }), ["busy", "working"]);
 assert.equal(quietText({ stuck: false, quiet_busy: false }), null);
+
+assert.deepEqual(pinArgs({ agent: "claude", terminal: "t3", session: "5d1e-synthetic" }), ["live", "--pin", "t3"]);
+assert.deepEqual(pinArgs({ agent: "claude", terminal: null, session: "5d1e-synthetic" }), ["live", "--pin", "5d1e-synthetic"]);
+assert.equal(pinArgs({ agent: null, terminal: "t9", session: null }), null); // no agent to pin
+assert.equal(pinArgs({ agent: "pi", terminal: null, session: null }), null);
+assert.deepEqual(unpinArgs({ agent: "claude", terminal: "t3", session: "5d1e-synthetic" }), [
+  ["live", "--unpin", "t3"],
+  ["live", "--unpin", "5d1e-synthetic"],
+]);
+assert.deepEqual(unpinArgs({ agent: "claude", terminal: null, session: "5d1e-synthetic" }), [["live", "--unpin", "5d1e-synthetic"]]);
 
 console.log("live.test.mjs: ok");

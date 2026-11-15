@@ -2,7 +2,7 @@ import { div, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme, props, closeOverlay, notify, run, shared, setShared } from "herdr";
 import { liveTree, liveList } from "./tree.js";
-import { statusFor, modelParts, contextText, turnText, loadParts, backgroundText, backgroundTip, quietText, CONTEXT_WARN } from "./live.js";
+import { statusFor, modelParts, contextText, turnText, loadParts, backgroundText, backgroundTip, quietText, pinArgs, unpinArgs, CONTEXT_WARN } from "./live.js";
 import {
   target,
   sendArgs,
@@ -68,6 +68,7 @@ export class Dashboard {
     // Live's Sweep panel: { parent, where, data, loading, error } for one row's session, or null.
     this.sweep = null;
     this.sweepN = 0; // which `sweep` call is the latest, so an older one's answer is dropped
+    this.pinning = null; // the `where` of the row being pinned or unpinned
     this.cli = null; // cliStatus() while the CLI is missing or too old
     this.inLayout = true; // whether the status-bar block is in the current layout
     this.setup = null; // a setup step's progress or failure
@@ -317,8 +318,43 @@ export class Dashboard {
                 .children(load.map(([text, high], j) => div().text_color(high ? t.blocked : t.dim).child(`${j ? "· " : ""}${text}`))),
             ),
           )
-          .when(hasSweep(r), (el) => el.child(this.sweepToggle(t, r, i))),
+          .when(hasSweep(r), (el) => el.child(this.sweepToggle(t, r, i)))
+          .when(Boolean(pinArgs(r)), (el) => el.child(this.pinToggle(t, r, i))),
       );
+  }
+
+  // "Pin" / "Unpin" on a Live row: pinned agents come first (`trailboss live --pin`).
+  pinToggle(t, r, i) {
+    const busy = this.pinning === r.where;
+    const args = r.pinned ? unpinArgs(r) : [pinArgs(r)];
+    return div()
+      .id(`pin-${i}`)
+      .flex_none()
+      .cursor_pointer()
+      .text_color(t.dim)
+      .hover((s) => s.text_color(t.foreground))
+      .tooltip(r.pinned ? "Let it go back among the others (trailboss live --unpin)" : "Keep it at the top (trailboss live --pin)")
+      .on_click((_e, cx) => {
+        cx.stop_propagation(); // not the row's click, which focuses its terminal
+        if (!busy) cx.spawn((cx) => this.pin(cx, r.where, args));
+      })
+      .child(busy ? "…" : r.pinned ? "Unpin" : "Pin");
+  }
+
+  // Runs each `live --pin` / `--unpin` call, then reloads Live to show the new order.
+  async pin(cx, where, calls) {
+    this.pinning = where;
+    cx.notify();
+    try {
+      for (const args of calls) await tb(args);
+    } catch (e) {
+      notify({ title: `Couldn't ${calls[0][1] === "--pin" ? "pin" : "unpin"} ${where}`, body: String(e?.message ?? e), level: "error" });
+    }
+    // Says "…" until the reload shows the new order.
+    while (this.loading.Live) await new Promise((r) => cx.timer.after(100, () => r()));
+    await this.load(cx, "Live");
+    this.pinning = null;
+    cx.notify();
   }
 
   // ---------------------------------------------------------------- Live's Sweep panel

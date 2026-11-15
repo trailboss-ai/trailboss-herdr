@@ -158,3 +158,14 @@ export function quietText(r) {
   if (r.quiet_busy) return [`busy${m}`, "working"];
   return null;
 }
+
+// `trailboss live --pin` for a row: its terminal, else its session (what `--pin` takes);
+// null for a row with no agent, or neither.
+export function pinArgs(r) {
+  const what = r?.agent ? (r.terminal ?? r.session) : null;
+  return what ? ["live", "--pin", what] : null;
+}
+
+// `--unpin` takes what was pinned, the terminal or the session (it may have been pinned by
+// hand either way): one call for each the row has.
+export const unpinArgs = (r) => [r?.terminal, r?.session].filter(Boolean).map((x) => ["live", "--unpin", x]);
