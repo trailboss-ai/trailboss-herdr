@@ -1,11 +1,12 @@
 import { div, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { exec, theme, openOverlay, notify, shared, setShared, home, readTextFile } from "herdr";
+import { exec, theme, openOverlay, notify as post, shared, setShared, home, readTextFile, focused } from "herdr";
 import { MOD, ICON, cliStatus, setupStep, tb, plural, money, ymd, short } from "../lib.js";
 import { quotaRows } from "../usage/quota.js";
 import { toWarn, warning } from "../usage/pace.js";
 import { needsWords, detailsOn, needsByTerminal, NEEDS_KEY } from "./live.js";
 import { toAnnounce, announceText, belongs } from "./send.js";
+import { unreadCount, seenAfterNotice } from "./unread.js";
 
 // The status-bar block: agents running, working / blocked, today's cost and the Claude
 // 5-hour window. It keeps `trailboss` tracking which session runs in which terminal (every
@@ -62,6 +63,7 @@ export class Block {
     this.setup = null; // "Installing…", or why installing failed
     this.loaded = false; // the first poll (which builds the index on a first run) is done
     this.details = false; // the config's notifications.details: say what an agent asks, not just its kind
+    this.notified = {}; // Herdr terminals a notification went to, { terminal: ms }: see markSeen
     cx.spawn((cx) => this.start(cx));
     cx.timer.every(POLL_MS, (cx) => cx.spawn((cx) => this.poll(cx)));
   }
@@ -77,13 +79,29 @@ export class Block {
     await this.resume(cx, true);
   }
 
+  // Posts a notification; one whose click goes to a terminal records it for markSeen.
+  notify(n) {
+    const t = n.action?.name === "pane.focus" ? n.action.args?.terminal : null;
+    if (t) this.notified[t] = Date.now();
+    return post(n);
+  }
+
+  // A notification's click goes to its terminal with Herdr's own pane.focus, which the mod
+  // doesn't see: when a terminal one went to is in front at a look and its agent's reply is
+  // unread, mark it seen (`trailboss seen`, on a CLI that tracks unread replies).
+  markSeen(live) {
+    const { seen, notified } = seenAfterNotice(this.notified, focused()?.terminal ?? null, live, Date.now());
+    this.notified = notified;
+    if (seen) tb(seen).catch(() => {});
+  }
+
   // Install or update the CLI: only ever on a click.
   async install(cx) {
     this.setup = "Installing…";
     cx.notify();
     const r = await setupStep("get-cli");
     this.setup = r.ok ? null : r.message;
-    notify({ title: r.ok ? r.message : "Couldn't install Trailboss", body: r.ok ? "" : r.message, level: r.ok ? "success" : "error", icon: ICON });
+    this.notify({ title: r.ok ? r.message : "Couldn't install Trailboss", body: r.ok ? "" : r.message, level: r.ok ? "success" : "error", icon: ICON });
     if (r.ok) await this.start(cx);
     cx.notify();
   }
@@ -97,7 +115,7 @@ export class Block {
     for (const e of events ?? []) {
       if (e.kind === "same_folder") {
         const first = (e.terminals ?? []).find((t, i) => t && (e.hosts?.[i] ?? "herdr") === "herdr");
-        notify({
+        this.notify({
           title: `${e.agents?.length ?? 2} agents are working in the same folder`,
           body: `${e.where}\n${e.cwd}`,
           level: "warning",
@@ -107,7 +125,7 @@ export class Block {
         continue;
       }
       if (e.kind === "stuck") {
-        notify({
+        this.notify({
           title: `${e.agent} ${e.where ?? ""} has made no progress for ${e.quiet_min ?? 10} min`.replace(/ +/g, " "),
           body: e.title ?? e.cwd ?? "",
           level: "warning",
@@ -122,7 +140,7 @@ export class Block {
       const mins = Math.floor((e.worked_ms ?? 0) / 60000);
       // Anyone near the screen sees a notification: only the kind of request, as the CLI's own.
       const why = needsWords(e, this.details);
-      notify({
+      this.notify({
         title:
           e.kind === "needs_you"
             ? `${who} needs you${why ? `: ${why}` : ""}`
@@ -151,7 +169,7 @@ export class Block {
     if (JSON.stringify(notified) !== JSON.stringify(before)) setShared(QUEUE_NOTIFIED, notified);
     for (const q of fresh) {
       const row = (live ?? []).find((r) => r.terminal && (r.host ?? "herdr") === "herdr" && belongs(q, r));
-      notify({
+      this.notify({
         ...announceText(q),
         level: "warning",
         icon: ICON,
@@ -165,7 +183,7 @@ export class Block {
     const { warn, warned } = toWarn(this.quota, shared(WARNED), Date.now() / 1000);
     if (!warn.length) return;
     setShared(WARNED, warned);
-    for (const q of warn) notify({ ...warning(q), level: "warning", icon: ICON, timeout: 15000 });
+    for (const q of warn) this.notify({ ...warning(q), level: "warning", icon: ICON, timeout: 15000 });
   }
 
   async poll(cx) {
@@ -178,6 +196,7 @@ export class Block {
       this.live = live;
       this.announce(events);
       this.shareNeeds(live);
+      this.markSeen(live);
       await this.announceQueue(live);
       if (this.polls % TODAY_EVERY === 0) {
         const u = await tb(["usage", "--by", "all", "--since", ymd(new Date())]);
@@ -209,7 +228,7 @@ export class Block {
     try {
       rows = await tb(["resume", ...(auto ? ["--auto"] : [])]);
     } catch (e) {
-      notify({ title: "Resume failed", body: String(e?.message ?? e), level: "error" });
+      this.notify({ title: "Resume failed", body: String(e?.message ?? e), level: "error" });
     } finally {
       this.busy = false;
     }
@@ -217,7 +236,7 @@ export class Block {
     const skipped = rows.filter((r) => r.action === "skipped");
     const yours = rows.filter((r) => r.action === "run it yourself");
     if (done.length || skipped.length) {
-      notify({
+      this.notify({
         title: done.length
           ? `${auto ? "Auto-resumed" : "Resumed"} ${plural(done.length, "agent session")}` +
             (skipped.length ? `, ${skipped.length} not` : "")
@@ -226,7 +245,7 @@ export class Block {
         level: skipped.length ? "warning" : "success",
       });
     } else if (!auto) {
-      notify({
+      this.notify({
         title: yours.length ? `${plural(yours.length, "session")} outside Herdr to resume` : "No agent sessions to resume",
         body: yours.map((r) => r.detail).join("\n"),
         level: "info",
@@ -249,6 +268,7 @@ export class Block {
     const lost = this.live.filter((r) => (r.status ?? "").startsWith("lost")).length;
     const crowd = crowded(live);
     const stuck = live.filter((r) => r.stuck).length;
+    const unread = unreadCount(live);
     const five = this.quota.find((q) => q.provider === "claude" && q.window === "5h");
     const hot = (five?.pace_percent ?? 0) > 100;
     const sep = () => div().text_color(t.border).child("·");
@@ -282,6 +302,7 @@ export class Block {
               .when(working > 0, (el) => el.child(div().text_color(t.working).child(`${working} working`)))
               .when(blocked > 0, (el) => el.child(div().text_color(t.blocked).child(`${blocked} waiting`)))
               .when(stuck > 0, (el) => el.child(div().text_color(t.blocked).child(`⚠ ${stuck} stuck`)))
+              .when(unread > 0, (el) => el.child(div().text_color(t.accent).child(`${unread} unread`)))
               .when(crowd.length > 0, (el) =>
                 el.child(div().text_color(t.blocked).child(`⚠ ${crowd.reduce((n, g) => n + g.length, 0)} in one folder`)),
               )

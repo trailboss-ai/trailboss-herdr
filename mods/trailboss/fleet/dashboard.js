@@ -22,6 +22,7 @@ import {
 import { sweepParent, hasSweep, sweepGroups, sweepCounts, heading, stateTone, nextTone, prBadge, firstLine, terminalFor } from "./sweep.js";
 import { sweepReport, notedTasks, needsTaskLs, sameTarget } from "./report.js";
 import { newReport, reportStep, reportCard } from "./reportcard.js";
+import { unreadBadge, branchBadge, branchTip, seenOnFocus, markUnreadArgs, wantsRecap, recapKey, recapArgs, readRecap, recapTip } from "./unread.js";
 import { openInsights } from "../usage/insights.js";
 import { ICON, cliStatus, setupStep, recordInstall, blockInLayout, tb, plural, money, daysAgo, short, statusColor } from "../lib.js";
 
@@ -36,6 +37,9 @@ const bgTip = (r) => {
   if (!bgTips.has(r)) bgTips.set(r, backgroundTip(r));
   return bgTips.get(r);
 };
+// Away recaps (`trailboss recap`), { line, tip } or null, by recapKey: one call per session
+// each time its unread turns change, kept across dashboard openings, never asked at a draw.
+const recaps = new Map();
 // The last `trailboss stats` result, shared with the Stats side panel (same shape there).
 const STATS_KEY = "trailboss.stats";
 
@@ -74,6 +78,8 @@ export class Dashboard {
     this.sweep = null;
     this.sweepN = 0; // which `sweep` call is the latest, so an older one's answer is dropped
     this.pinning = null; // the `where` of the row being pinned or unpinned
+    this.marking = null; // the `where` of the row being marked unread
+    this.recapping = false; // a round of recap calls is out
     this.cli = null; // cliStatus() while the CLI is missing or too old
     this.inLayout = true; // whether the status-bar block is in the current layout
     this.setup = null; // a setup step's progress or failure
@@ -144,6 +150,7 @@ export class Dashboard {
     try {
       if (tab === "Live") {
         this.rows.Live = await tb(["live"]);
+        cx.spawn((cx) => this.loadRecaps(cx));
         this.rows.Lost = await tb(["resume", "--dry-run"]);
         // Queued messages are an extra: Live still shows if `queue` fails.
         this.rows.Queue = await tb(["queue"]).catch(() => this.rows.Queue ?? []);
@@ -261,14 +268,11 @@ export class Dashboard {
     const load = loadParts(r);
     const quiet = quietText(r);
     const jobs = backgroundText(r);
+    const unread = unreadBadge(r);
+    const branches = branchBadge(r);
+    const recap = wantsRecap(r, now) ? recaps.get(recapKey(r)) : null;
     // Only Herdr's own terminals can be focused from here.
-    const focus =
-      r.terminal && (r.host ?? "herdr") === "herdr"
-        ? () => {
-            run("pane.focus", { terminal: r.terminal });
-            closeOverlay(this.overlay);
-          }
-        : null;
+    const focus = r.terminal && (r.host ?? "herdr") === "herdr" ? (_e, cx) => cx.spawn(() => this.focus(r.terminal, r)) : null;
     return v_flex()
       .id(`live-${i}`)
       .rounded(5)
@@ -293,12 +297,16 @@ export class Dashboard {
           .text_color(t.dim)
           .child(
             div()
+              .id(`live-${i}-why`)
               .flex_1()
               .min_w(0)
               .truncate()
               .when(Boolean(r.needs), (el) => el.text_color(t.blocked))
-              .child(`${indent}${r.pinned ? "pinned · " : ""}${r.needs ?? turnText(r, now)}`),
+              .when(!r.needs && Boolean(recap), (el) => el.text_color(t.muted).when(Boolean(recap?.tip), (el) => el.tooltip(recap.tip)))
+              .child(`${indent}${r.pinned ? "pinned · " : ""}${r.needs ?? recap?.line ?? turnText(r, now)}`),
           )
+          .when(Boolean(unread), (el) => el.child(this.badge(t, `unread-${i}`, unread, "Finished turns you haven't seen")))
+          .when(Boolean(branches), (el) => el.child(this.badge(t, `branches-${i}`, branches, branchTip(r))))
           .when(runs.length > 0, (el) =>
             el.child(
               h_flex()
@@ -324,8 +332,81 @@ export class Dashboard {
             ),
           )
           .when(hasSweep(r), (el) => el.child(this.sweepToggle(t, r, i)))
+          .when(Boolean(markUnreadArgs(r)), (el) => el.child(this.markUnread(t, r, i)))
           .when(Boolean(pinArgs(r)), (el) => el.child(this.pinToggle(t, r, i))),
       );
+  }
+
+  // Goes to an agent's terminal and closes the dashboard; when the CLI tracks unread replies,
+  // marks its session seen first (`trailboss seen`). An older CLI's refusal is ignored.
+  async focus(terminal, row) {
+    run("pane.focus", { terminal });
+    const seen = seenOnFocus(row);
+    try {
+      if (seen) await tb(seen);
+    } catch {}
+    closeOverlay(this.overlay);
+  }
+
+  // A small accent badge on a Live row's second line: "3 unread", "⑂ 2".
+  badge(t, id, text, tip) {
+    return div().id(id).flex_none().px(5).rounded(4).bg(t.accent).text_color(t.accent_foreground).text_size(10.5).tooltip(tip).child(text);
+  }
+
+  // "Mark unread" on a Live row whose replies you've seen: `trailboss seen --unread`.
+  markUnread(t, r, i) {
+    const busy = this.marking === r.where;
+    return div()
+      .id(`unread-mark-${i}`)
+      .flex_none()
+      .cursor_pointer()
+      .text_color(t.dim)
+      .hover((s) => s.text_color(t.foreground))
+      .tooltip("Count its last reply as unread again (trailboss seen --unread)")
+      .on_click((_e, cx) => {
+        cx.stop_propagation(); // not the row's click, which focuses its terminal
+        if (!busy) cx.spawn((cx) => this.mark(cx, r.where, markUnreadArgs(r)));
+      })
+      .child(busy ? "…" : "Mark unread");
+  }
+
+  async mark(cx, where, args) {
+    this.marking = where;
+    cx.notify();
+    try {
+      await tb(args);
+    } catch (e) {
+      notify({ title: `Couldn't mark ${where} unread`, body: String(e?.message ?? e), level: "error" });
+    }
+    while (this.loading.Live) await new Promise((r) => cx.timer.after(100, () => r()));
+    await this.load(cx, "Live");
+    this.marking = null;
+    cx.notify();
+  }
+
+  // The away recap for each unread row whose oldest unread turn ended 10+ minutes ago, asked
+  // once per session and unread count (a failed or unknown `recap` isn't asked again).
+  async loadRecaps(cx) {
+    if (this.recapping) return;
+    this.recapping = true;
+    try {
+      const now = Date.now();
+      const want = (this.rows.Live ?? []).filter((r) => wantsRecap(r, now));
+      const keys = new Set(want.map(recapKey));
+      for (const k of recaps.keys()) if (!keys.has(k)) recaps.delete(k);
+      for (const r of want) {
+        const key = recapKey(r);
+        if (recaps.has(key)) continue;
+        recaps.set(key, null);
+        try {
+          const rc = readRecap(await tb(recapArgs(r)), r);
+          if (rc) recaps.set(key, { line: rc.line, tip: recapTip(rc) });
+        } catch {}
+        cx.notify();
+      }
+    } finally {
+      this.recapping = false;
+    }
   }
 
   // "Pin" / "Unpin" on a Live row: pinned agents come first (`trailboss live --pin`).
@@ -459,6 +540,7 @@ export class Dashboard {
         const id = `sweep-${gi}-${j}`;
         const badge = prBadge(row.pr);
         const term = terminalFor(row, live);
+        const termRow = term ? (live ?? []).find((x) => x.terminal === term && (x.host ?? "herdr") === "herdr") : null;
         const indent = row.depth ? `${"   ".repeat(row.depth - 1)}└ ` : "";
         const report = sweepReport(row, sw.noted);
         out.push(
@@ -469,10 +551,7 @@ export class Dashboard {
               el
                 .cursor_pointer()
                 .hover((s) => s.bg(t.hover))
-                .on_click(() => {
-                  run("pane.focus", { terminal: term });
-                  closeOverlay(this.overlay);
-                }),
+                .on_click((_e, cx) => cx.spawn(() => this.focus(term, termRow))),
             )
             .child(
               this.line(t, `${id}-top`, [
