@@ -2,7 +2,7 @@ import { div, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme, props, closeOverlay, notify, run, shared, setShared } from "herdr";
 import { liveTree, liveList } from "./tree.js";
-import { statusFor, modelParts, contextText, turnText, resources, CONTEXT_WARN } from "./live.js";
+import { statusFor, modelParts, contextText, turnText, loadParts, backgroundText, backgroundTip, quietText, CONTEXT_WARN } from "./live.js";
 import {
   target,
   sendArgs,
@@ -25,6 +25,13 @@ import { ICON, cliStatus, setupStep, recordInstall, blockInLayout, tb, plural, m
 // Stats, each one Trailboss command, plus a button for the Insights window.
 
 const TABS = ["Live", "Sessions", "Usage", "Quota", "Stats"];
+// A Live row's background-jobs tooltip, made once per `live` result (rows are new objects
+// each refresh) rather than at every draw.
+const bgTips = new WeakMap();
+const bgTip = (r) => {
+  if (!bgTips.has(r)) bgTips.set(r, backgroundTip(r));
+  return bgTips.get(r);
+};
 // The last `trailboss stats` result, shared with the Stats side panel (same shape there).
 const STATS_KEY = "trailboss.stats";
 
@@ -245,7 +252,9 @@ export class Dashboard {
     const ctx = contextText(r);
     const full = (r.context_pct ?? 0) > CONTEXT_WARN;
     const runs = modelParts(r);
-    const load = resources(r);
+    const load = loadParts(r);
+    const quiet = quietText(r);
+    const jobs = backgroundText(r);
     // Only Herdr's own terminals can be focused from here.
     const focus =
       r.terminal && (r.host ?? "herdr") === "herdr"
@@ -261,7 +270,7 @@ export class Dashboard {
       .child(
         this.line(t, `live-${i}-top`, [
           [`${"   ".repeat(depth)}${depth ? "└ " : ""}${r.where}`, 260],
-          r.stuck ? [`stuck ${r.quiet_min}m`, 96, t.blocked] : [statusFor(r, now), 96, statusColor(t, r.status)],
+          quiet ? [quiet[0], 96, t[quiet[1]]] : [statusFor(r, now), 96, statusColor(t, r.status)],
           [money(r.cost_usd), 70, t.muted],
           !tree && sharing
             ? [`${parent}⇄ ${sharing + 1} in folder · ${r.title ?? r.cwd}`, null, t.working]
@@ -295,7 +304,19 @@ export class Dashboard {
                 ),
             ),
           )
-          .when(Boolean(load), (el) => el.child(div().flex_none().w(110).child(load)))
+          .when(Boolean(jobs), (el) =>
+            el.child(div().id(`live-${i}-bg`).flex_none().text_color(t.muted).tooltip(bgTip(r)).child(jobs)),
+          )
+          // Dim unless high.
+          .when(load.length > 0, (el) =>
+            el.child(
+              h_flex()
+                .flex_none()
+                .w(110)
+                .gap(4)
+                .children(load.map(([text, high], j) => div().text_color(high ? t.blocked : t.dim).child(`${j ? "· " : ""}${text}`))),
+            ),
+          )
           .when(hasSweep(r), (el) => el.child(this.sweepToggle(t, r, i))),
       );
   }

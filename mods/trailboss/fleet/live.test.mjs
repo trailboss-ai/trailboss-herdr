@@ -1,6 +1,6 @@
 // node mods/trailboss/fleet/live.test.mjs
 import assert from "node:assert/strict";
-import { rank, needsWords, needsByTerminal, detailsOn, ago, statusFor, modelName, effortName, contextText, modelParts, turnText, resources } from "./live.js";
+import { rank, needsWords, needsByTerminal, detailsOn, ago, statusFor, modelName, effortName, contextText, modelParts, turnText, resources, loadParts, backgroundText, backgroundTip, quietText } from "./live.js";
 
 assert.deepEqual(
   ["blocked", "done", "working", "busy", "idle", "lost", undefined].map((status) => rank({ status })),
@@ -70,5 +70,30 @@ assert.equal(turnText({ turn: null }, now), "");
 assert.equal(resources({ cpu_pct: 38.2, rss_bytes: 612368384 }), "38% cpu · 584 MB");
 assert.equal(resources({ cpu_pct: 0.4, rss_bytes: 3 * 2 ** 30 }), "0% cpu · 3.0 GB");
 assert.equal(resources({ cpu_pct: null, rss_bytes: null }), "");
+
+// Dim unless high: a core kept busy, or 2 GB.
+assert.deepEqual(loadParts({ cpu_pct: 38.2, rss_bytes: 612368384 }), [["38% cpu", false], ["584 MB", false]]);
+assert.deepEqual(loadParts({ cpu_pct: 140, rss_bytes: 2 * 2 ** 30 }), [["140% cpu", true], ["2.0 GB", true]]);
+assert.deepEqual(loadParts({ cpu_pct: 99.9, rss_bytes: null }), [["100% cpu", false]]);
+assert.deepEqual(loadParts({}), []);
+
+const shells = [
+  { kind: "shell", label: "npm run dev", since: now - 12 * 60_000 },
+  { kind: "shell", label: "cargo watch -x test", since: null },
+];
+assert.equal(backgroundText({ background: shells }), "2 background shells");
+assert.equal(backgroundText({ background: [shells[0]] }), "1 background shell");
+assert.equal(backgroundText({ background: [{ kind: "process", label: "vite", since: null }] }), "1 background process");
+assert.equal(backgroundText({ background: [...shells, { kind: "monitor", label: "tail log", since: null }] }), "3 background jobs");
+assert.equal(backgroundText({ background: [{ kind: "new_kind", label: "x", since: null }] }), "1 background job");
+assert.equal(backgroundText({ background: [] }), null);
+assert.equal(backgroundText({ background: null }), null);
+assert.equal(backgroundTip({ background: shells }, now), "shell · npm run dev · 12m\nshell · cargo watch -x test");
+assert.equal(backgroundTip({ background: null }, now), "");
+
+assert.deepEqual(quietText({ stuck: true, quiet_min: 12 }), ["stuck 12m", "blocked"]);
+assert.deepEqual(quietText({ stuck: false, quiet_busy: true, quiet_min: 15 }), ["busy 15m", "working"]);
+assert.deepEqual(quietText({ quiet_busy: true, quiet_min: null }), ["busy", "working"]);
+assert.equal(quietText({ stuck: false, quiet_busy: false }), null);
 
 console.log("live.test.mjs: ok");

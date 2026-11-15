@@ -113,13 +113,48 @@ export function turnText(r, now = Date.now()) {
   return `turn ${r.turn} ended${a ? ` ${a} ago` : ""}`;
 }
 
-// "38% cpu · 584 MB": its processes' load, when known.
-export function resources(r) {
+// A row's load stands out from this much CPU (percent of one core: a core kept busy) or
+// resident memory (an agent's tree usually holds a few hundred MB); below, it stays dim.
+export const CPU_HIGH = 100;
+export const RSS_HIGH = 2 * 2 ** 30;
+
+// Its processes' load, when known: [["38% cpu", false], ["2.4 GB", true]], each with whether
+// it's high.
+export function loadParts(r) {
   const out = [];
-  if (r.cpu_pct != null) out.push(`${Math.round(r.cpu_pct)}% cpu`);
+  if (r.cpu_pct != null) out.push([`${Math.round(r.cpu_pct)}% cpu`, r.cpu_pct >= CPU_HIGH]);
   if (r.rss_bytes != null) {
     const mb = r.rss_bytes / 2 ** 20;
-    out.push(mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`);
+    out.push([mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`, r.rss_bytes >= RSS_HIGH]);
   }
-  return out.join(" · ");
+  return out;
+}
+
+// "38% cpu · 584 MB": its processes' load, when known.
+export const resources = (r) => loadParts(r).map(([text]) => text).join(" · ");
+
+// "2 background shells", "1 background monitor", "3 background jobs" when they're of several
+// kinds; null when it left none running (or `live` can't tell).
+const JOB_KINDS = { shell: ["shell", "shells"], monitor: ["monitor", "monitors"], process: ["process", "processes"] };
+export function backgroundText(r) {
+  const jobs = r.background ?? [];
+  if (!jobs.length) return null;
+  const kind = jobs.every((j) => j.kind === jobs[0].kind) ? JOB_KINDS[jobs[0].kind] : null;
+  const [one, many] = kind ?? ["job", "jobs"];
+  return `${jobs.length} background ${jobs.length === 1 ? one : many}`;
+}
+
+// The tooltip for those: one line each, "shell · npm run dev · 12m".
+export function backgroundTip(r, now = Date.now()) {
+  return (r.background ?? []).map((j) => [j.kind, j.label, ago(j.since, now)].filter(Boolean).join(" · ")).join("\n");
+}
+
+// Working with no progress for a while: ["stuck 12m", "blocked"] when its processes are idle,
+// ["busy 12m", "working"] when they're busy (a long build or test run); [label, tone], tone a
+// theme color name. null otherwise.
+export function quietText(r) {
+  const m = r.quiet_min != null ? ` ${r.quiet_min}m` : "";
+  if (r.stuck) return [`stuck${m}`, "blocked"];
+  if (r.quiet_busy) return [`busy${m}`, "working"];
+  return null;
 }
