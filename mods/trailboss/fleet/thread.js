@@ -13,7 +13,7 @@ import { askable, branchArgs, readBranch, planText } from "./branch.js";
 // session among the ones forked, started or run as subagents around it; with a CLI that has
 // no tree it stays hidden. "Branch from here" on a turn of the session asks a side question in
 // a fork of it as of that turn (`trailboss branch`): the plan first, then Start runs it with
-// --yes. With a CLI that has no `branch` the control stays hidden.
+// --yes.
 
 const ALIVE = "trailboss.threads"; // terminal → when its pane last ticked
 const AGENT_TURNS = "trailboss.thread.agent"; // show messages the agent sent itself (task reports)
@@ -49,7 +49,6 @@ export class Thread {
     this.treeLoading = false;
     this.search = InputState.new({ placeholder: "Search prompts and replies…" });
     this.search.on("change", (_e, cx) => cx.notify());
-    this.canBranch = null; // whether the CLI has `branch`: found once per pane, null until known
     this.branching = null; // the open card: { turn, plan, planFor, error, busy }
     this.question = InputState.new({ placeholder: "Your side question (two words at least)…" });
     this.question.on("change", (_e, cx) => cx.notify());
@@ -83,7 +82,6 @@ export class Thread {
       this.turns = await tb(["thread", this.key()]);
       this.error = null;
       cx.spawn((cx) => this.loadTree(cx));
-      if (this.canBranch == null) cx.spawn((cx) => this.checkBranch(cx));
     } catch (e) {
       this.error = err(e);
     }
@@ -117,19 +115,6 @@ export class Thread {
     cx.notify();
   }
 
-  // Whether the CLI has `branch`, once: a plan (nothing starts without --yes) that a CLI from
-  // before it fails as an unknown subcommand. A refusal for this session still means it has it.
-  async checkBranch(cx) {
-    const key = this.key();
-    if (!key || this.canBranch != null || this.checkingBranch) return;
-    this.checkingBranch = true;
-    try {
-      this.canBranch = !readBranch(await tbRun(["branch", key])).unsupported;
-    } catch {}
-    this.checkingBranch = false;
-    cx.notify();
-  }
-
   openBranch(cx, turn) {
     this.branching = { turn, plan: null, planFor: null, error: null, busy: false };
     this.question.set_value("");
@@ -157,10 +142,7 @@ export class Thread {
       r = { error: err(e) };
     }
     b.busy = false;
-    if (r.unsupported) {
-      this.canBranch = false;
-      this.branching = null;
-    } else if (r.error) {
+    if (r.error) {
       b.error = r.error;
       b.plan = null;
     } else if (yes) {
@@ -268,7 +250,6 @@ export class Thread {
   // session stands out. A turn of this session opens it; another session's focuses its terminal.
   treeView(t, tree) {
     const mine = tree.focus ?? this.key(); // the CLI names the pane's session as it knows it
-    const branch = this.canBranch === true;
     const rows = treeLines(tree, mine).map((l, i) => {
       const act = nodeAction(l.node, tree, mine);
       return h_flex()
@@ -300,7 +281,7 @@ export class Thread {
         .when(Boolean(l.marker), (el) => el.child(div().flex_none().text_size(11).text_color(t.accent).child(l.marker)))
         .child(div().flex_1().min_w(0).truncate().text_color(l.mine ? t.foreground : t.muted).when(l.mine, (x) => x.font_semibold()).child(l.label))
         .when(Boolean(l.state), (el) => el.child(div().flex_none().text_size(11).text_color(statusColor(t, l.state)).child(l.state)))
-        .when(branch && l.mine && l.node.turn != null, (el) =>
+        .when(l.mine && l.node.turn != null, (el) =>
           el.child(
             div()
               .id(`br-${i}`)
@@ -453,7 +434,7 @@ export class Thread {
           .child(this.button(t, "copy", this.copied === "reply" ? "Copied" : "Copy reply", (cx) => this.copy(cx, x.reply, "reply")))
           .child(this.button(t, "quote", "Quote into the prompt", (cx) => this.quote(cx, x.reply)))
           .child(this.button(t, "copy-prompt", this.copied === "prompt" ? "Copied" : "Copy prompt", (cx) => this.copy(cx, x.prompt, "prompt")))
-          .when(this.canBranch === true, (el) => el.child(this.button(t, "branch-open", "⑂ Branch from here", (cx) => this.openBranch(cx, x.n))))
+          .child(this.button(t, "branch-open", "⑂ Branch from here", (cx) => this.openBranch(cx, x.n)))
           .children(blocks.map((b, i) => this.button(t, `code-${i}`, this.copied === `code-${i}` ? "Copied" : `Copy code ${blocks.length > 1 ? i + 1 : ""}`.trim() + ` (${short(b.split("\n")[0], 24)})`, (cx) => this.copy(cx, b, `code-${i}`)))),
       );
   }

@@ -49,11 +49,6 @@ assert.deepEqual(readBranch({ code: 1, stdout: "", stderr: "" }), { error: "trai
 assert.deepEqual(readBranch({ code: 0, stdout: "[]", stderr: "" }), { error: "trailboss branch failed (exit 0)" });
 assert.deepEqual(readBranch(null), { error: "trailboss branch failed (exit ?)" });
 
-// A CLI from before `branch`.
-assert.deepEqual(
-  readBranch({ code: 2, stdout: "", stderr: "error: unrecognized subcommand 'branch'\n\n  tip: some similar subcommands exist: 'watch'\n\nUsage: trailboss [OPTIONS] <COMMAND>\n" }),
-  { unsupported: true },
-);
 
 // The card's lines; an action this mod doesn't know shows as is.
 assert.deepEqual(planText(plan), { detail: plan.detail, command: plan.command });

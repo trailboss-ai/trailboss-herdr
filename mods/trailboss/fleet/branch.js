@@ -19,12 +19,8 @@ export function branchArgs(session, turn, question, yes = false, name = null) {
   ];
 }
 
-// A CLI from before `branch` doesn't know the subcommand.
-const UNKNOWN = /unrecognized subcommand '?branch'?/i;
-
 /** What a `trailboss --json branch` run said, from its { code, stdout, stderr }:
- *  { row } (the plan, or what started), { unsupported: true } for a CLI without `branch`, or
- *  { error } with the CLI's own words (a refusal: an agent it can't fork, a turn it can't
+ *  { row } (the plan, or what started), or { error } with the CLI's own words (a refusal: an agent it can't fork, a turn it can't
  *  branch from, …). The JSON on stdout is read whatever the exit code. */
 export function readBranch(r) {
   const out = (r?.stdout ?? "").trim();
@@ -35,7 +31,6 @@ export function readBranch(r) {
     } catch {}
   }
   const text = `${r?.stderr ?? ""}\n${out.startsWith("[") ? "" : out}`.trim();
-  if (UNKNOWN.test(text)) return { unsupported: true };
   const line = text.split("\n").map((s) => s.trim()).find((s) => s && !/^(Usage|For more information)/.test(s));
   return { error: (line ?? "").replace(/^(trailboss|error):\s*/, "") || `trailboss branch failed (exit ${r?.code ?? "?"})` };
 }
