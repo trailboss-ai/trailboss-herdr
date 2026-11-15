@@ -17,7 +17,7 @@ import {
   summary,
   removedText,
 } from "./send.js";
-import { sweepParent, sweepGroups, sweepCounts, heading, stateTone, nextTone, prBadge, firstLine, terminalFor } from "./sweep.js";
+import { sweepParent, hasSweep, sweepGroups, sweepCounts, heading, stateTone, nextTone, prBadge, firstLine, terminalFor } from "./sweep.js";
 import { openInsights } from "../usage/insights.js";
 import { ICON, cliStatus, setupStep, recordInstall, blockInLayout, tb, plural, money, daysAgo, short, statusColor } from "../lib.js";
 
@@ -296,7 +296,7 @@ export class Dashboard {
             ),
           )
           .when(Boolean(load), (el) => el.child(div().flex_none().w(110).child(load)))
-          .when(Boolean(sweepParent(r)), (el) => el.child(this.sweepToggle(t, r, i))),
+          .when(hasSweep(r), (el) => el.child(this.sweepToggle(t, r, i))),
       );
   }
 

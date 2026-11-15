@@ -1,12 +1,19 @@
 // node mods/trailboss/fleet/sweep.test.mjs
 import assert from "node:assert/strict";
-import { sweepParent, heading, nextFor, sweepGroups, sweepCounts, stateTone, nextTone, prBadge, firstLine, terminalFor } from "./sweep.js";
+import { sweepParent, heading, nextFor, sweepGroups, sweepCounts, stateTone, nextTone, prBadge, firstLine, terminalFor, hasSweep } from "./sweep.js";
 
 // Live's bare session id gets its agent; one already AGENT:ID stays; none, null.
 assert.equal(sweepParent({ agent: "claude", session: "5b2c" }), "claude:5b2c");
 assert.equal(sweepParent({ agent: "claude", session: "codex:019a" }), "codex:019a");
 assert.equal(sweepParent({ agent: "claude", session: null }), null);
 assert.equal(sweepParent(null), null);
+
+// The Sweep link: on a row with a session, unless Live says nothing was started from it.
+assert.equal(hasSweep({ agent: "claude", session: "5b2c" }), true); // no `started` (older CLI)
+assert.equal(hasSweep({ agent: "claude", session: "5b2c", started: 2 }), true);
+assert.equal(hasSweep({ agent: "claude", session: "5b2c", started: 0 }), false);
+assert.equal(hasSweep({ agent: "claude", session: null, started: 3 }), false);
+assert.equal(hasSweep(null), false);
 
 // Rows shaped like `trailboss --json sweep`'s (made up).
 const P = "claude:p";
@@ -97,5 +104,14 @@ assert.equal(terminalFor(data.rows[1], live), "t10");
 assert.equal(terminalFor(data.rows[2], live), null);
 assert.equal(terminalFor(data.rows[3], live), null);
 assert.equal(terminalFor(data.rows[0], null), null);
+
+// A sweep row that names its own terminal is focused by it, no Live needed; only a Herdr one.
+assert.equal(terminalFor({ session: null, terminal: "t4", host: "herdr" }, []), "t4");
+assert.equal(terminalFor({ session: "claude:a", terminal: "t4", host: "herdr" }, live), "t4");
+assert.equal(terminalFor({ session: "claude:a", terminal: "t4", host: null }, null), "t4");
+assert.equal(terminalFor({ session: "claude:a", terminal: "w2", host: "vscode" }, live), null);
+// Null when unknown: Live's row for the session, as before.
+assert.equal(terminalFor({ session: "claude:a", terminal: null, host: null }, live), "t9");
+assert.equal(terminalFor({ session: null, terminal: null, host: null }, live), null);
 
 console.log("sweep ok");

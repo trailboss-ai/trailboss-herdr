@@ -8,6 +8,13 @@ export function sweepParent(r) {
   return r.session.includes(":") || !r.agent ? r.session : `${r.agent}:${r.session}`;
 }
 
+// Whether a Live row gets the "Sweep ▸" link: it has a session and, when Live counts what was
+// started from it (`started`), that count isn't 0. A CLI that doesn't count shows it as before.
+export function hasSweep(r) {
+  if (!sweepParent(r)) return false;
+  return typeof r.started === "number" ? r.started > 0 : true;
+}
+
 // The order of `next`'s kinds; a kind this mod doesn't know goes after these, as is.
 const KINDS = ["decision", "wait", "info"];
 const HEADINGS = { decision: "Your decision", wait: "Waiting", info: "At rest", none: "Nothing next" };
@@ -86,9 +93,11 @@ export function prBadge(pr) {
 // The first non-empty line of what the agent last said; "" when nothing.
 export const firstLine = (s) => (s ?? "").split("\n").map((l) => l.trim()).find(Boolean) ?? "";
 
-// The Herdr terminal to focus for a sweep row: its session's terminal in Live, when Herdr runs it.
+// The Herdr terminal to focus for a sweep row: its own `terminal` when sweep names one, else its
+// session's terminal in Live; either only when Herdr runs it.
 export function terminalFor(row, live) {
+  const herdr = (x) => (x?.terminal && (x.host ?? "herdr") === "herdr" ? x.terminal : null);
+  if (row?.terminal) return herdr(row);
   if (!row?.session) return null;
-  const r = (live ?? []).find((x) => sweepParent(x) === row.session);
-  return r?.terminal && (r.host ?? "herdr") === "herdr" ? r.terminal : null;
+  return herdr((live ?? []).find((x) => sweepParent(x) === row.session));
 }
