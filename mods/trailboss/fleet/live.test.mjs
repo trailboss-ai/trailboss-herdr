@@ -1,6 +1,6 @@
 // node mods/trailboss/fleet/live.test.mjs
 import assert from "node:assert/strict";
-import { rank, needsWords, needsByTerminal, detailsOn, ago, statusFor, modelName, effortName, contextText, modelParts, turnText, resources, loadParts, backgroundText, backgroundTip, quietText, pinArgs, unpinArgs } from "./live.js";
+import { rank, needsWords, needsByTerminal, detailsOn, ago, statusFor, modelName, effortName, contextText, modelParts, turnText, resources, loadParts, backgroundText, backgroundTip, quietText, pinArgs, unpinArgs, rowToggles, markers, alertText, alertTip, spendNotice } from "./live.js";
 
 assert.deepEqual(
   ["blocked", "done", "working", "busy", "idle", "lost", undefined].map((status) => rank({ status })),
@@ -105,5 +105,53 @@ assert.deepEqual(unpinArgs({ agent: "claude", terminal: "t3", session: "5d1e-syn
   ["live", "--unpin", "5d1e-synthetic"],
 ]);
 assert.deepEqual(unpinArgs({ agent: "claude", terminal: null, session: "5d1e-synthetic" }), [["live", "--unpin", "5d1e-synthetic"]]);
+
+// Quiet and Settle only when the CLI says whether a row is: an older one has neither field.
+const labels = (r) => rowToggles(r).map(([label]) => label);
+const row = { agent: "claude", terminal: "t3", session: "5d1e-synthetic", pinned: false };
+assert.deepEqual(labels(row), ["Pin"]);
+assert.deepEqual(labels({ ...row, quiet: false, settled: false }), ["Quiet", "Settle", "Pin"]);
+assert.deepEqual(labels({ ...row, quiet: true, settled: true, pinned: true }), ["Unquiet", "Unsettle", "Unpin"]);
+const calls = (r) => Object.fromEntries(rowToggles(r).map(([label, c]) => [label, c]));
+assert.deepEqual(calls({ ...row, quiet: false, settled: false }).Settle, [["live", "--settle", "t3"]]);
+assert.deepEqual(calls({ ...row, quiet: true, settled: false }).Unquiet, [["live", "--unquiet", "t3"]]);
+// No terminal: the session, as for --pin.
+assert.deepEqual(calls({ ...row, terminal: null, settled: true }).Unsettle, [["live", "--unsettle", "5d1e-synthetic"]]);
+assert.deepEqual(calls({ ...row, quiet: false }).Quiet, [["live", "--quiet", "t3"]]);
+assert.deepEqual(calls({ ...row, pinned: true }).Unpin, unpinArgs(row));
+assert.deepEqual(rowToggles({ agent: null, terminal: "t8", quiet: false, settled: false }), []);
+assert.equal(markers({ pinned: true, quiet: true, settled: false }), "pinned · quiet · ");
+assert.equal(markers({}), "");
+
+// Spending alerts, short.
+assert.equal(alertText({ limit: "session", amount_usd: 12.35, limit_usd: 10 }), "$12.35 > $10 session");
+assert.equal(alertText({ limit: "folder", amount_usd: 31.2, limit_usd: 30.5 }), "$31.20 > $30.50 folder");
+assert.equal(alertText({ limit: "session", amount_usd: 4.12, limit_usd: 4.0 }), "$4.12 > $4 session");
+assert.equal(alertText(undefined), null);
+assert.equal(alertText({ limit: "session", amount_usd: null, limit_usd: 4 }), null);
+assert.match(alertTip({ limit: "session", amount_usd: 5, limit_usd: 4 }), /alerts\.session_usd/);
+assert.match(alertTip({ limit: "new_limit", amount_usd: 5, limit_usd: 4 }), /new_limit/);
+assert.equal(alertTip(undefined), "");
+
+// spend_alert events, as the spec's examples give them.
+const ev = {
+  kind: "spend_alert",
+  where: "t3 api",
+  terminal: "t3",
+  agent: "claude",
+  title: "Add retry to the billing client",
+  cwd: "/home/user/code/api",
+  alert: { limit: "session", amount_usd: 4.12, limit_usd: 4.0 },
+};
+assert.deepEqual(spendNotice(ev), { title: "Spending alert: $4.12 > $4 session", body: "claude t3 api · Add retry to the billing client" });
+assert.deepEqual(spendNotice({ ...ev, where: null, terminal: null, agent: null, title: null, alert: { limit: "folder", amount_usd: 31.2, limit_usd: 30 } }), {
+  title: "Spending alert: $31.20 > $30 folder",
+  body: "/home/user/code/api",
+});
+assert.deepEqual(spendNotice({ kind: "spend_alert", where: null, agent: null, cwd: null, alert: { limit: "day", amount_usd: 51.37, limit_usd: 50 } }), {
+  title: "Spending alert: $51.37 > $50 day",
+  body: "All agents today",
+});
+assert.equal(spendNotice({ kind: "spend_alert" }), null);
 
 console.log("live.test.mjs: ok");

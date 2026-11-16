@@ -2,7 +2,8 @@ import { div, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme, props, closeOverlay, notify, run, shared, setShared } from "herdr";
 import { liveTree, liveList } from "./tree.js";
-import { statusFor, modelParts, contextText, turnText, loadParts, backgroundText, backgroundTip, quietText, pinArgs, unpinArgs, CONTEXT_WARN } from "./live.js";
+import { statusFor, modelParts, contextText, turnText, loadParts, backgroundText, backgroundTip, quietText, rowToggles, markers, alertText, alertTip, CONTEXT_WARN } from "./live.js";
+import { isBoard, boardRows, boardLines, moreText, moreTip, groupTone } from "./board.js";
 import {
   target,
   sendArgs,
@@ -78,7 +79,9 @@ export class Dashboard {
     // session, or null. `noted`: the tasks with review notes; `report`: an open Report back card.
     this.sweep = null;
     this.sweepN = 0; // which `sweep` call is the latest, so an older one's answer is dropped
-    this.pinning = null; // the `where` of the row being pinned or unpinned
+    this.toggling = null; // the `where` of the row being pinned, settled or quieted, or undone
+    this.boardless = false; // `live --board` failed where `live` worked: an older CLI, no Board view
+    this.opened = new Set(); // the Board's "+N at rest" and "N settled" lines that are open
     this.marking = null; // the `where` of the row being marked unread
     this.looping = null; // the id of the `until` loop being paused, resumed or stopped
     this.loops = new Map(); // each Live row's running `until` loop, matched once per refresh
@@ -152,7 +155,17 @@ export class Dashboard {
     cx.notify();
     try {
       if (tab === "Live") {
-        this.rows.Live = await tb(["live"]);
+        // The Board view reads `live --board`; its rows are the same rows `live` gives.
+        const wantBoard = this.liveView === "board" && !this.boardless;
+        let board = wantBoard ? await tb(["live", "--board"]).catch(() => null) : null;
+        if (!isBoard(board)) board = null;
+        this.rows.Live = board ? boardRows(board) : await tb(["live"]);
+        // Only reached when `live` worked: the CLI has no board, so the view goes.
+        if (wantBoard && !board) {
+          this.boardless = true;
+          this.liveView = null;
+        }
+        this.rows.Board = board;
         cx.spawn((cx) => this.loadRecaps(cx));
         this.rows.Lost = await tb(["resume", "--dry-run"]);
         // Queued messages are an extra: Live still shows if `queue` fails.
@@ -277,6 +290,7 @@ export class Dashboard {
     const branches = branchBadge(r);
     const recap = wantsRecap(r, now) ? recaps.get(recapKey(r)) : null;
     const loop = this.loops.get(r);
+    const alert = alertText(r.alert);
     // Only Herdr's own terminals can be focused from here.
     const focus = r.terminal && (r.host ?? "herdr") === "herdr" ? (_e, cx) => cx.spawn(() => this.focus(r.terminal, r)) : null;
     return v_flex()
@@ -287,7 +301,7 @@ export class Dashboard {
         this.line(t, `live-${i}-top`, [
           [`${"   ".repeat(depth)}${depth ? "└ " : ""}${r.where}`, 260],
           quiet ? [quiet[0], 96, t[quiet[1]]] : [statusFor(r, now), 96, statusColor(t, r.status)],
-          [money(r.cost_usd), 70, t.muted],
+          [money(r.cost_usd), 70, alert ? t.blocked : t.muted],
           !tree && sharing
             ? [`${parent}⇄ ${sharing + 1} in folder · ${r.title ?? r.cwd}`, null, t.working]
             : [`${tree ? "" : parent}${r.title ?? r.cwd ?? ""}`, null, t.muted],
@@ -309,8 +323,9 @@ export class Dashboard {
               .truncate()
               .when(Boolean(r.needs), (el) => el.text_color(t.blocked))
               .when(!r.needs && Boolean(recap), (el) => el.text_color(t.muted).when(Boolean(recap?.tip), (el) => el.tooltip(recap.tip)))
-              .child(`${indent}${r.pinned ? "pinned · " : ""}${r.needs ?? recap?.line ?? turnText(r, now)}`),
+              .child(`${indent}${markers(r)}${r.needs ?? recap?.line ?? turnText(r, now)}`),
           )
+          .when(Boolean(alert), (el) => el.child(div().id(`alert-${i}`).flex_none().text_color(t.blocked).tooltip(alertTip(r.alert)).child(alert)))
           .when(Boolean(unread), (el) => el.child(this.badge(t, `unread-${i}`, unread, "Finished turns you haven't seen")))
           .when(Boolean(branches), (el) => el.child(this.badge(t, `branches-${i}`, branches, branchTip(r))))
           .when(Boolean(loop), (el) => el.children(this.untilLoop(t, loop, i, now)))
@@ -340,7 +355,7 @@ export class Dashboard {
           )
           .when(hasSweep(r), (el) => el.child(this.sweepToggle(t, r, i)))
           .when(Boolean(markUnreadArgs(r)), (el) => el.child(this.markUnread(t, r, i)))
-          .when(Boolean(pinArgs(r)), (el) => el.child(this.pinToggle(t, r, i))),
+          .children(rowToggles(r).map((tg) => this.rowToggle(t, r, i, tg))),
       );
   }
 
@@ -456,38 +471,43 @@ export class Dashboard {
     cx.notify();
   }
 
-  // "Pin" / "Unpin" on a Live row: pinned agents come first (`trailboss live --pin`).
-  pinToggle(t, r, i) {
-    const busy = this.pinning === r.where;
-    const args = r.pinned ? unpinArgs(r) : [pinArgs(r)];
+  // Pin / Unpin, Settle / Unsettle or Quiet / Unquiet on a Live row (rowToggles): pinned
+  // agents come first, settled ones leave the Board, quiet ones stop counting as needing you.
+  rowToggle(t, r, i, [label, calls, tip]) {
+    const busy = this.toggling === r.where;
     return div()
-      .id(`pin-${i}`)
+      .id(`toggle-${i}-${label}`)
       .flex_none()
       .cursor_pointer()
       .text_color(t.dim)
       .hover((s) => s.text_color(t.foreground))
-      .tooltip(r.pinned ? "Let it go back among the others (trailboss live --unpin)" : "Keep it at the top (trailboss live --pin)")
+      .tooltip(tip)
       .on_click((_e, cx) => {
         cx.stop_propagation(); // not the row's click, which focuses its terminal
-        if (!busy) cx.spawn((cx) => this.pin(cx, r.where, args));
+        if (this.toggling == null) cx.spawn((cx) => this.toggle(cx, r.where, label, calls));
       })
-      .child(busy ? "…" : r.pinned ? "Unpin" : "Pin");
+      .child(busy ? "…" : label);
   }
 
-  // Runs each `live --pin` / `--unpin` call, then reloads Live to show the new order.
-  async pin(cx, where, calls) {
-    this.pinning = where;
+  // Runs each `live --pin|--settle|--quiet…` call, then reloads Live to show the change.
+  async toggle(cx, where, label, calls) {
+    this.toggling = where;
     cx.notify();
     try {
       for (const args of calls) await tb(args);
     } catch (e) {
-      notify({ title: `Couldn't ${calls[0][1] === "--pin" ? "pin" : "unpin"} ${where}`, body: String(e?.message ?? e), level: "error" });
+      notify({ title: `Couldn't ${label.toLowerCase()} ${where}`, body: String(e?.message ?? e), level: "error" });
     }
-    // Says "…" until the reload shows the new order.
+    // Says "…" until the reload shows it.
+    await this.reloadLive(cx);
+    this.toggling = null;
+    cx.notify();
+  }
+
+  // Loads Live again once a load already out is done (its answer may predate a change).
+  async reloadLive(cx) {
     while (this.loading.Live) await new Promise((r) => cx.timer.after(100, () => r()));
     await this.load(cx, "Live");
-    this.pinning = null;
-    cx.notify();
   }
 
   // ---------------------------------------------------------------- Live's Sweep panel
@@ -871,7 +891,9 @@ export class Dashboard {
 
     if (tab === "Live") {
       const rows = this.rows.Live ?? [];
-      const tree = this.liveView !== "list";
+      const view = this.liveView === "board" && !this.boardless ? "board" : this.liveView === "list" ? "list" : "tree";
+      const tree = view === "tree";
+      const views = [["tree", "By folder"], ["list", "List"], ...(this.boardless ? [] : [["board", "Board"]])];
       out.push(
         h_flex()
           .px(10)
@@ -879,14 +901,19 @@ export class Dashboard {
           .gap(10)
           .text_size(11.5)
           .children(
-            [["tree", "By folder"], ["list", "List"]].map(([v, label]) =>
+            views.map(([v, label]) =>
               div()
                 .id(`view-${v}`)
                 .cursor_pointer()
-                .text_color((v === "tree") === tree ? t.foreground : t.dim)
+                .text_color(v === view ? t.foreground : t.dim)
                 .hover((s) => s.text_color(t.foreground))
+                .when(v === "board", (el) => el.tooltip("Grouped by state, as trailboss live --board"))
                 .on_click((_e, cx) => {
+                  if (v === view) return;
+                  // The Board reads another command: load it (or `live` again) now.
+                  const reload = v === "board" || view === "board";
                   this.liveView = v;
+                  if (reload) cx.spawn((cx) => this.reloadLive(cx));
                   cx.notify();
                 })
                 .child(label),
@@ -895,9 +922,44 @@ export class Dashboard {
       );
       out.push(this.pickable(t, null, "head", this.head(t, [["Where", 260], ["Status", 96], ["Cost", 70], ["Session", null]])));
       // By folder: agents sharing a folder under one heading, sub-agents indented under the
-      // agent that started them. List: one row each, as `live` returns them.
-      const lines = tree ? liveTree(rows) : liveList(rows);
-      lines.forEach(({ group: g, row: r, depth }, i) => {
+      // agent that started them. List: one row each, as `live` returns them. Board: `live
+      // --board`'s groups, until it has loaded (switching to it) the rows as a list.
+      const board = view === "board" && isBoard(this.rows.Board) ? this.rows.Board : null;
+      const lines = board ? boardLines(board, this.opened) : tree ? liveTree(rows) : liveList(rows);
+      lines.forEach(({ group: g, row: r, depth, more, count, open }, i) => {
+        if (more) {
+          out.push(
+            div()
+              .id(`more-${more}`)
+              .px(10)
+              .pt(8)
+              .pb(2)
+              .text_size(11.5)
+              .text_color(t.dim)
+              .cursor_pointer()
+              .hover((s) => s.text_color(t.foreground))
+              .tooltip(moreTip(more))
+              .on_click((_e, cx) => {
+                if (open) this.opened.delete(more);
+                else this.opened.add(more);
+                cx.notify();
+              })
+              .child(`${open ? "▾" : "▸"} ${moreText(more, count)}`),
+          );
+          return;
+        }
+        if (g && board) {
+          out.push(
+            div()
+              .px(10)
+              .pt(8)
+              .pb(2)
+              .text_size(11.5)
+              .text_color(t[groupTone(g.state)] ?? t.dim)
+              .child(`${g.name} · ${g.count}`),
+          );
+          return;
+        }
         if (g) {
           // More than one agent working in one folder can overwrite each other's changes.
           const busy = g.working > 1;
@@ -915,7 +977,8 @@ export class Dashboard {
           );
           return;
         }
-        out.push(this.pickable(t, r, i, this.liveRow(t, r, depth, tree, i)), ...this.sendNotes(t, r, i));
+        // On the Board, a sub-agent sits under its parent, which names it already.
+        out.push(this.pickable(t, r, i, this.liveRow(t, r, depth, board ? depth > 0 : tree, i)), ...this.sendNotes(t, r, i));
         if (this.sweep && sweepParent(r) === this.sweep.parent) out.push(this.sweepPanel(t, rows));
       });
       // Its agent has left Live since: the panel stays, after the list.
@@ -923,6 +986,7 @@ export class Dashboard {
         out.push(this.note(t, `Sweep of ${this.sweep.where ?? this.sweep.parent}, no longer running:`), this.sweepPanel(t, rows));
       }
       if (!rows.length && this.rows.Live) out.push(this.note(t, "No agents running."));
+      else if (board && !lines.some((l) => l.row)) out.push(this.note(t, "Nothing on the board."));
       const lost = this.rows.Lost ?? [];
       if (lost.length) {
         out.push(

@@ -4,7 +4,7 @@ import { exec, theme, openOverlay, notify as post, shared, setShared, home, read
 import { MOD, ICON, cliStatus, setupStep, tb, plural, money, ymd, short } from "../lib.js";
 import { quotaRows } from "../usage/quota.js";
 import { toWarn, warning } from "../usage/pace.js";
-import { needsWords, detailsOn, needsByTerminal, NEEDS_KEY } from "./live.js";
+import { needsWords, detailsOn, needsByTerminal, NEEDS_KEY, spendNotice } from "./live.js";
 import { toAnnounce, announceText, belongs } from "./send.js";
 import { unreadCount, seenAfterNotice } from "./unread.js";
 
@@ -108,8 +108,8 @@ export class Block {
 
   // Herdr already notifies about agents in its own terminals; Trailboss covers the rest
   // (VS Code, plain terminals). Set shared "trailboss.notify.herdr" to true for all of them.
-  // Agents working in the same folder, and agents making no progress, are Trailboss's own
-  // warnings, wherever they run.
+  // Agents working in the same folder, agents making no progress and spending over a limit
+  // from the config's alerts are Trailboss's own warnings, wherever they run.
   announce(events) {
     const all = shared("trailboss.notify.herdr") === true;
     for (const e of events ?? []) {
@@ -132,6 +132,17 @@ export class Block {
           icon: ICON,
           ...(e.terminal && e.in_herdr ? { action: { name: "pane.focus", args: { terminal: e.terminal } } } : {}),
         });
+        continue;
+      }
+      if (e.kind === "spend_alert") {
+        const n = spendNotice(e);
+        if (n)
+          this.notify({
+            ...n,
+            level: "warning",
+            icon: ICON,
+            ...(e.terminal && e.in_herdr ? { action: { name: "pane.focus", args: { terminal: e.terminal } } } : {}),
+          });
         continue;
       }
       // Every turn's end (turn_finished) and an agent ending aren't news on the desktop.

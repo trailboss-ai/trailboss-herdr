@@ -169,3 +169,59 @@ export function pinArgs(r) {
 // `--unpin` takes what was pinned, the terminal or the session (it may have been pinned by
 // hand either way): one call for each the row has.
 export const unpinArgs = (r) => [r?.terminal, r?.session].filter(Boolean).map((x) => ["live", "--unpin", x]);
+
+// The toggles on a Live row, each [label, calls, tooltip]: Quiet / Unquiet and Settle /
+// Unsettle (`live --quiet|--unquiet|--settle|--unsettle`, only when the CLI says whether the
+// row is quiet or settled: an older one doesn't), then Pin / Unpin. A row with no agent has
+// none.
+export function rowToggles(r) {
+  const name = pinArgs(r)?.[2];
+  if (!name) return [];
+  const out = [];
+  if (typeof r.quiet === "boolean")
+    out.push(
+      r.quiet
+        ? ["Unquiet", [["live", "--unquiet", name]], "Count its finished turns and questions as needing you again (trailboss live --unquiet)"]
+        : ["Quiet", [["live", "--quiet", name]], "A background worker: its finished turns and questions don't need you; approvals and errors still do (trailboss live --quiet)"],
+    );
+  if (typeof r.settled === "boolean")
+    out.push(
+      r.settled
+        ? ["Unsettle", [["live", "--unsettle", name]], "Put it back on the board (trailboss live --unsettle)"]
+        : ["Settle", [["live", "--settle", name]], "Off the board until it needs you, finishes or starts a turn (trailboss live --settle)"],
+    );
+  out.push(r.pinned ? ["Unpin", unpinArgs(r), "Let it go back among the others (trailboss live --unpin)"] : ["Pin", [pinArgs(r)], "Keep it at the top (trailboss live --pin)"]);
+  return out;
+}
+
+// The words before a row's reason or turn: "pinned · quiet · settled · ".
+export const markers = (r) => ["pinned", "quiet", "settled"].filter((k) => r[k] === true).map((k) => `${k} · `).join("");
+
+// A spending alert, short: "$12.35 > $10 session", "$31.20 > $30 folder"; null when there's
+// none (or a CLI without spending alerts).
+const usd = (x) => (Number.isInteger(x) ? `$${x}` : `$${x.toFixed(2)}`);
+export function alertText(a) {
+  if (!a || typeof a.amount_usd !== "number" || typeof a.limit_usd !== "number") return null;
+  return `$${a.amount_usd.toFixed(2)} > ${usd(a.limit_usd)}${a.limit ? ` ${a.limit}` : ""}`;
+}
+
+// What it means, on hover, with the config key that set the limit.
+const LIMITS = {
+  session: "This session has cost more than the session limit (alerts.session_usd)",
+  folder: "Agents in this folder have cost more than the folder limit today (alerts.folder_usd)",
+  day: "Agents have cost more than the day limit today (alerts.day_usd)",
+};
+export const alertTip = (a) => (a ? `${LIMITS[a.limit] ?? `Over the ${a.limit} spending limit`}, at API prices` : "");
+
+// A spend_alert event as a notification's { title, body }; null when it carries no alert.
+// A session's names its agent, a folder's its folder; a day's is everyone's.
+export function spendNotice(e) {
+  const text = alertText(e?.alert);
+  if (!text) return null;
+  const who = `${e.agent ?? ""} ${e.where ?? ""}`.trim();
+  const body =
+    e.alert.limit === "folder" ? (e.cwd ?? "")
+    : e.alert.limit === "day" ? "All agents today"
+    : [who, e.title ?? e.cwd].filter(Boolean).join(" · ");
+  return { title: `Spending alert: ${text}`, body };
+}
