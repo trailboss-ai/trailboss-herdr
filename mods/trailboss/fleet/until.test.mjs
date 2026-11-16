@@ -1,6 +1,6 @@
 // node mods/trailboss/fleet/until.test.mjs
 import assert from "node:assert/strict";
-import { LS_ARGS, readLoops, loopsByRow, untilState, untilChip, untilTip, untilActions } from "./until.js";
+import { LS_ARGS, readLoops, loopsByRow, untilState, untilChip, untilTip, untilActions, untilDone } from "./until.js";
 
 // `trailboss --json until ls`, as in its specification's example.
 const loops = [
@@ -95,5 +95,9 @@ assert.deepEqual(labels({ ...running, state: "paused" }), ["Resume", "Stop"]);
 assert.deepEqual(labels({ ...running, state: "checking" }), ["Pause", "Stop"]);
 assert.deepEqual(labels({ ...running, requested: "stop" }), []);
 assert.deepEqual(labels({ ...running, state: "stopped" }), []);
+
+// The notification after a click names the loop's terminal (without its host) and round.
+assert.equal(untilDone({ terminal: "herdr:t12", round: 3 }, "Stop"), "Stopped the until loop on t12 (round 3)");
+assert.equal(untilDone({ terminal: null, round: null }, "Pause"), "Paused the until loop");
 
 console.log("until ok");

@@ -23,7 +23,7 @@ import { sweepParent, hasSweep, sweepGroups, sweepCounts, heading, stateTone, ne
 import { sweepReport, notedTasks, needsTaskLs, sameTarget } from "./report.js";
 import { newReport, reportStep, reportCard } from "./reportcard.js";
 import { unreadBadge, branchBadge, branchTip, seenOnFocus, markUnreadArgs, wantsRecap, recapKey, recapArgs, readRecap, recapTip } from "./unread.js";
-import { LS_ARGS, loopsByRow, untilChip, untilTip, untilActions } from "./until.js";
+import { LS_ARGS, loopsByRow, untilChip, untilTip, untilActions, untilDone } from "./until.js";
 import { openInsights } from "../usage/insights.js";
 import { ICON, cliStatus, setupStep, recordInstall, blockInLayout, tb, plural, money, daysAgo, short, statusColor } from "../lib.js";
 
@@ -433,7 +433,7 @@ export class Dashboard {
           .tooltip(tip)
           .on_click((_e, cx) => {
             cx.stop_propagation(); // not the row's click, which focuses its terminal
-            if (this.looping == null) cx.spawn((cx) => this.untilDo(cx, l.id, label, args));
+            if (this.looping == null) cx.spawn((cx) => this.untilDo(cx, l, label, args));
           })
           .child(busy ? "…" : label),
       ),
@@ -441,11 +441,12 @@ export class Dashboard {
   }
 
   // Runs `until pause|resume|stop <id>`, then reloads Live to show what the loop says now.
-  async untilDo(cx, id, label, args) {
-    this.looping = id;
+  async untilDo(cx, l, label, args) {
+    this.looping = l.id;
     cx.notify();
     try {
       await tb(args);
+      notify({ title: untilDone(l, label), level: "success", icon: ICON });
     } catch (e) {
       notify({ title: `Couldn't ${label.toLowerCase()} the until loop`, body: String(e?.message ?? e), level: "error" });
     }

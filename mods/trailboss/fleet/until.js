@@ -78,3 +78,12 @@ export function untilActions(l) {
   if (l.state !== "stopped" && l.requested !== "stop") out.push(["Stop", ["until", "stop", id], "End the loop (trailboss until stop)"]);
   return out;
 }
+
+// What a click did, for the notification that confirms it: "Stopped the until loop on t12
+// (round 3)". Stop asks nothing first; this is how a misclick shows.
+export function untilDone(l, label) {
+  const past = { Pause: "Paused", Resume: "Resumed", Stop: "Stopped" }[label] ?? label;
+  const where = l.terminal ? ` on ${String(l.terminal).replace(/^[^:]+:/, "")}` : "";
+  const round = l.round != null ? ` (round ${l.round})` : "";
+  return `${past} the until loop${where}${round}`;
+}
