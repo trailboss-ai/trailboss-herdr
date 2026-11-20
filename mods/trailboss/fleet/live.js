@@ -166,9 +166,13 @@ export function pinArgs(r) {
   return what ? ["live", "--pin", what] : null;
 }
 
-// `--unpin` takes what was pinned, the terminal or the session (it may have been pinned by
-// hand either way): one call for each the row has.
-export const unpinArgs = (r) => [r?.terminal, r?.session].filter(Boolean).map((x) => ["live", "--unpin", x]);
+// `trailboss live --unpin` for a row, named as for --pin: the CLI takes the terminal or the
+// session of a pinned row, whichever it was pinned by, so one call does. Null when there's
+// nothing to name.
+export function unpinArgs(r) {
+  const what = r?.agent ? (r.terminal ?? r.session) : null;
+  return what ? ["live", "--unpin", what] : null;
+}
 
 // The toggles on a Live row, each [label, calls, tooltip]: Quiet / Unquiet and Settle /
 // Unsettle (`live --quiet|--unquiet|--settle|--unsettle`, only when the CLI says whether the
@@ -190,7 +194,7 @@ export function rowToggles(r) {
         ? ["Unsettle", [["live", "--unsettle", name]], "Put it back on the board (trailboss live --unsettle)"]
         : ["Settle", [["live", "--settle", name]], "Off the board until it needs you, finishes or starts a turn (trailboss live --settle)"],
     );
-  out.push(r.pinned ? ["Unpin", unpinArgs(r), "Let it go back among the others (trailboss live --unpin)"] : ["Pin", [pinArgs(r)], "Keep it at the top (trailboss live --pin)"]);
+  out.push(r.pinned ? ["Unpin", [unpinArgs(r)], "Let it go back among the others (trailboss live --unpin)"] : ["Pin", [pinArgs(r)], "Keep it at the top (trailboss live --pin)"]);
   return out;
 }
 

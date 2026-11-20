@@ -100,11 +100,10 @@ assert.deepEqual(pinArgs({ agent: "claude", terminal: "t3", session: "5d1e-synth
 assert.deepEqual(pinArgs({ agent: "claude", terminal: null, session: "5d1e-synthetic" }), ["live", "--pin", "5d1e-synthetic"]);
 assert.equal(pinArgs({ agent: null, terminal: "t9", session: null }), null); // no agent to pin
 assert.equal(pinArgs({ agent: "pi", terminal: null, session: null }), null);
-assert.deepEqual(unpinArgs({ agent: "claude", terminal: "t3", session: "5d1e-synthetic" }), [
-  ["live", "--unpin", "t3"],
-  ["live", "--unpin", "5d1e-synthetic"],
-]);
-assert.deepEqual(unpinArgs({ agent: "claude", terminal: null, session: "5d1e-synthetic" }), [["live", "--unpin", "5d1e-synthetic"]]);
+// One call, whichever it was pinned by: the CLI takes the terminal or the session.
+assert.deepEqual(unpinArgs({ agent: "claude", terminal: "t3", session: "5d1e-synthetic" }), ["live", "--unpin", "t3"]);
+assert.deepEqual(unpinArgs({ agent: "claude", terminal: null, session: "5d1e-synthetic" }), ["live", "--unpin", "5d1e-synthetic"]);
+assert.equal(unpinArgs({ agent: null, terminal: "t9", session: null }), null);
 
 // Quiet and Settle only when the CLI says whether a row is: an older one has neither field.
 const labels = (r) => rowToggles(r).map(([label]) => label);
@@ -118,7 +117,8 @@ assert.deepEqual(calls({ ...row, quiet: true, settled: false }).Unquiet, [["live
 // No terminal: the session, as for --pin.
 assert.deepEqual(calls({ ...row, terminal: null, settled: true }).Unsettle, [["live", "--unsettle", "5d1e-synthetic"]]);
 assert.deepEqual(calls({ ...row, quiet: false }).Quiet, [["live", "--quiet", "t3"]]);
-assert.deepEqual(calls({ ...row, pinned: true }).Unpin, unpinArgs(row));
+assert.deepEqual(calls({ ...row, pinned: true }).Unpin, [["live", "--unpin", "t3"]]);
+assert.deepEqual(calls({ ...row, terminal: null, pinned: true }).Unpin, [["live", "--unpin", "5d1e-synthetic"]]);
 assert.deepEqual(rowToggles({ agent: null, terminal: "t8", quiet: false, settled: false }), []);
 assert.equal(markers({ pinned: true, quiet: true, settled: false }), "pinned · quiet · ");
 assert.equal(markers({}), "");
